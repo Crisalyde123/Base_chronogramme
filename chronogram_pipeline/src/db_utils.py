@@ -1,8 +1,13 @@
 from .logger import get_logger
 import sqlite3
+from datetime import datetime
 from pathlib import Path
+from typing import Dict, Any
 
 logger = get_logger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_DB = BASE_DIR / "output/databases/chronogrammes.db"
 
 CHRONO_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS Chronogrammes (
@@ -64,3 +69,29 @@ def init_databases(chronogram_db: Path, injects_db: Path) -> None:
         with create_connection(injects_db) as inject_conn:
             init_tables(inject_conn)
     logger.info("Databases initialised: %s, %s", chronogram_db, injects_db)
+
+
+def insert_chronogram(record: Dict[str, Any], db_path: Path | None = None) -> int:
+    """Insert a chronogram record and return its generated ID."""
+    db_path = db_path or DEFAULT_DB
+    with create_connection(db_path) as conn:
+        init_tables(conn)
+        columns = [
+            "nom_chronogramme",
+            "date_exercice",
+            "lieu_exercice",
+            "etablissement_nom",
+            "etablissement_type",
+            "submitter",
+            "date_soumission",
+            "fichier_source",
+            "nb_injects",
+        ]
+        values = [record.get(col) for col in columns]
+        placeholders = ", ".join("?" for _ in columns)
+        sql = f"INSERT INTO Chronogrammes ({', '.join(columns)}) VALUES ({placeholders})"
+        cur = conn.execute(sql, values)
+        conn.commit()
+        chrono_id = int(cur.lastrowid)
+        logger.debug("Inserted chronogram with id %s", chrono_id)
+        return chrono_id
