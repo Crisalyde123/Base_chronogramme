@@ -1,11 +1,10 @@
 """Script to initialise SQLite databases for the chronogram pipeline."""
-import logging
 from pathlib import Path
 
 from db_utils import init_databases
+from .logger import get_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def main() -> None:
