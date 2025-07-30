@@ -1,8 +1,8 @@
-import logging
+from .logger import get_logger
 import sqlite3
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 CHRONO_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS Chronogrammes (
