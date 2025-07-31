@@ -158,8 +158,20 @@ def find_data_table(sheet: openpyxl.worksheet.worksheet.Worksheet) -> Tuple[int,
     raise ValueError("No header row found")
 
 
-def extract_headers(sheet: openpyxl.worksheet.worksheet.Worksheet, header_row: int, first_col: int, last_col: int) -> List[str]:
-    cells = sheet.iter_rows(min_row=header_row, max_row=header_row, min_col=first_col, max_col=last_col, values_only=True)
+def extract_headers(
+    sheet: openpyxl.worksheet.worksheet.Worksheet,
+    header_row: int,
+    first_col: int,
+    last_col: int,
+) -> List[str]:
+    """Return header values from ``sheet`` between ``first_col`` and ``last_col``."""
+    cells = sheet.iter_rows(
+        min_row=header_row,
+        max_row=header_row,
+        min_col=first_col,
+        max_col=last_col,
+        values_only=True,
+    )
     headers = []
     for row in cells:
         for value in row:

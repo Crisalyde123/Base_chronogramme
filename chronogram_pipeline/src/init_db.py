@@ -8,6 +8,7 @@ logger = get_logger(__name__)
 
 
 def main() -> None:
+    """Initialise the SQLite databases used by the pipeline."""
     base_dir = Path(__file__).resolve().parents[1] / "output/databases"
     chrono_db = base_dir / "chronogrammes.db"
     injects_db = base_dir / "injects.db"

@@ -31,6 +31,7 @@ STANDARD_FIELDS = [
 
 
 def _norm(text: str | None) -> str:
+    """Return ``text`` lowercased and stripped, or an empty string if ``None``."""
     return "" if text is None else str(text).strip().lower()
 
 
