@@ -7,3 +7,7 @@ Ce dépôt contient l'orchestration complète : extraction des fichiers Excel, 
 
 Chaque lancement du pipeline crée un fichier `run_<horodatage>.log` dans `chronogram_pipeline/data/control/`. Ces journaux sont au format JSON et contiennent les messages techniques ainsi que les métriques de chaque étape du traitement. Ils permettent de tracer précisément les actions réalisées, notamment les appels à l'IA lors de la standardisation des en‑têtes.
 
+
+## Déclenchement du pipeline
+
+Les différentes méthodes pour lancer le traitement (formulaire, ligne de commande ou appel automatisé) sont détaillées dans [docs/declenchement.md](docs/declenchement.md).
