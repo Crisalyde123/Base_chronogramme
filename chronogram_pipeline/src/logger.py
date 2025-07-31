@@ -8,7 +8,8 @@ from pathlib import Path
 def _build_formatter():
     """Return a JSON formatter for log records."""
     try:
-        from pythonjsonlogger import jsonlogger
+        # use new module location to avoid deprecation warning
+        from pythonjsonlogger import json as jsonlogger
 
         class CustomJsonFormatter(jsonlogger.JsonFormatter):
             def add_fields(self, log_record, record, message_dict):

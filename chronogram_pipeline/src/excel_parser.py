@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union
 
 from openpyxl import load_workbook, Workbook
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,10 @@ def _ai_select_sheet(candidates):
 def detect_main_sheet(workbook: Union[str, Path, Workbook]):
     """Detect the worksheet containing the main chronogram table."""
     if isinstance(workbook, (str, Path)):
-        wb = load_workbook(workbook, data_only=True)
+        with warnings.catch_warnings():
+            # ignore unsupported Data Validation extension warnings from openpyxl
+            warnings.simplefilter("ignore", UserWarning)
+            wb = load_workbook(workbook, data_only=True)
     elif isinstance(workbook, Workbook):
         wb = workbook
     else:

@@ -2,6 +2,7 @@ import openpyxl
 import pandas as pd
 import unicodedata
 import logging
+import warnings
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -125,7 +126,10 @@ def enrich_mapping_values(input_dir: Path, header_map_path: Path, values_path: P
 
 def detect_main_sheet_openpyxl(workbook_path: Path) -> openpyxl.worksheet.worksheet.Worksheet:
     """Return the worksheet with the highest number of non-empty cells."""
-    wb = openpyxl.load_workbook(workbook_path, data_only=True)
+    with warnings.catch_warnings():
+        # ignore unsupported Data Validation extension warnings from openpyxl
+        warnings.simplefilter("ignore", UserWarning)
+        wb = openpyxl.load_workbook(workbook_path, data_only=True)
     best_sheet = wb.worksheets[0]
     max_count = -1
     for ws in wb.worksheets:
