@@ -25,6 +25,7 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
 
     headers = ["Descriptif", "Destinataires"]
 
+    log_xlsx = tmp_path / "log.xlsx"
     out = standardize_headers(
         headers,
         mapping_csv=mapping_csv,
@@ -32,7 +33,8 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
         prompts_dir=prompts_dir,
         gpt_suggest_header=fake_gpt,
         file_name="testfile",
-        log_xlsx=tmp_path / "log.xlsx",
+        log_xlsx=log_xlsx,
+        id_chronogramme=10,
     )
 
     assert out == ["Contenu", "Destinataire"]
@@ -42,3 +44,5 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
     assert "Destinataires" in df["En-tête original"].values
     # prompt saved
     assert (prompts_dir / "testfile_header_Destinataires.txt").exists()
+    log_df = pd.read_excel(log_xlsx)
+    assert set(log_df["id_chronogramme"]) == {10}
