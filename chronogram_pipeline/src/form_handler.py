@@ -22,8 +22,22 @@ def _sanitize(name: str) -> str:
     return cleaned or "chronogramme"
 
 
+def _format_component(value: str) -> str:
+    """Return cleaned and title-cased component for filename."""
+    cleaned = _sanitize(value)
+    parts = [p for p in cleaned.split("_") if p]
+    formatted = "_".join(part if part.isupper() else part.capitalize() for part in parts)
+    return formatted
+
+
 def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
     """Save uploaded Excel file and insert metadata.
+
+    The uploaded Excel file is renamed using ``etablissement_nom``,
+    ``nom_chronogramme`` and ``date_exercice`` fields in the form. Each
+    component is sanitized and capitalized, then combined as
+    ``Chronogramme_<etablissement>_<nom>_<date>.xlsx``. If a file with the same
+    name already exists, a timestamp suffix is appended to ensure uniqueness.
 
     Parameters
     ----------
@@ -39,12 +53,21 @@ def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
     """
 
     src_path = Path(form_data["file_path"])
+    if src_path.suffix.lower() != ".xlsx":
+        raise ValueError("File must be .xlsx")
+
     INPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    base = _sanitize(str(form_data.get("nom_chronogramme", "chronogramme")))
-    dest_name = f"{base}_{timestamp}{src_path.suffix}"
-    dest_path = INPUTS_DIR / dest_name
+    etab = _format_component(str(form_data.get("etablissement_nom", "")))
+    name = _format_component(str(form_data.get("nom_chronogramme", "")))
+    date = _format_component(str(form_data.get("date_exercice", "")))
+    base_parts = [part for part in [etab, name, date] if part]
+    base_name = "Chronogramme_" + "_".join(base_parts)
+    dest_path = INPUTS_DIR / f"{base_name}.xlsx"
+
+    if dest_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        dest_path = INPUTS_DIR / f"{base_name}_{timestamp}.xlsx"
 
     logger.info("Saving uploaded file to %s", dest_path)
     shutil.move(str(src_path), dest_path)
