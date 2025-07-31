@@ -5,6 +5,7 @@ from .mapping_utils import (
     extract_headers,
     update_mapping_headers,
 )
+from .standardizer import standardize_headers
 
 __all__ = [
     "create_connection",
@@ -13,4 +14,5 @@ __all__ = [
     "find_data_table",
     "extract_headers",
     "update_mapping_headers",
+    "standardize_headers",
 ]
