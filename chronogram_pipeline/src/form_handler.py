@@ -12,7 +12,8 @@ from .db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
 
 logger = get_logger(__name__)
 
-INPUTS_DIR = BASE_DIR / "data/inputs"
+# Directory where uploaded files are stored
+INPUTS_DIR = BASE_DIR / "data" / "inputs"
 
 
 def _sanitize(name: str) -> str:
@@ -25,7 +26,7 @@ def _sanitize(name: str) -> str:
 
 
 def _format_date(value: str | datetime | date) -> str:
-    """Return `value` formatted as `YYYY-MM-DD` if possible."""
+    """Return `value` formatted as `YYYY-MM-DD` if possible, else sanitized."""
     if isinstance(value, (datetime, date)):
         return value.strftime("%Y-%m-%d")
     if isinstance(value, str):
@@ -35,7 +36,7 @@ def _format_date(value: str | datetime | date) -> str:
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 continue
-    # fallback: sanitize the raw string
+    # Fallback to sanitization for any other string
     return _sanitize(value)
 
 
@@ -46,7 +47,12 @@ def save_excel_file(
     date_exercice: str | datetime | date,
     inputs_dir: Path = INPUTS_DIR,
 ) -> Path:
-    """Copy `src` to `inputs_dir` with a structured, unique file name."""
+    """
+    Copy `src` (.xlsx) into `inputs_dir` under a structured, unique filename:
+    Chronogramme_<etablissement>_<nom>_<date>.xlsx
+
+    Raises ValueError if `src` is not .xlsx.
+    """
     src_path = Path(src)
     if src_path.suffix.lower() != ".xlsx":
         raise ValueError("Uploaded file must be a .xlsx Excel file")
@@ -73,7 +79,7 @@ def save_excel_file(
 def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
     """
     Save the uploaded Excel file, insert its metadata into the DB,
-    and return (id_chronogramme, final_path).
+    and return (id_chronogramme, final_file_path).
 
     Expects in form_data:
       - "file_path"           : path to the temporary .xlsx
