@@ -1,7 +1,7 @@
 from .logger import get_logger
 import sqlite3
 import unicodedata
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Dict, Any
 import pandas as pd
@@ -156,7 +156,7 @@ def insert_chronogram_metadata(metadata: Dict[str, Any], db_path: Path | None = 
         "etablissement_nom": _clean_string(metadata["etablissement_nom"]),
         "etablissement_type": _clean_string(metadata["etablissement_type"]),
         "submitter": _clean_string(metadata["submitter"]),
-        "date_soumission": datetime.utcnow().isoformat(),
+        "date_soumission": datetime.now(timezone.utc).isoformat(),
         "fichier_source": _clean_string(metadata["nom_fichier_excel"]),
         "nb_injects": int(metadata.get("nb_injects", 0) or 0),
     }

@@ -8,8 +8,8 @@ import pandas as pd
 def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
     """Propagate merged cell values vertically and horizontally."""
     result = df.copy()
-    result.fillna(method="ffill", inplace=True)
-    result.fillna(method="ffill", axis=1, inplace=True)
+    result.ffill(inplace=True)
+    result.ffill(axis=1, inplace=True)
     return result
 
 

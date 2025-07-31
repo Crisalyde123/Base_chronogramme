@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import requests
@@ -72,7 +72,7 @@ def _append_mapping_log(
 ) -> None:
     """Append mapping *rows* to *log_path* with optional chronogram id."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     columns = [
         "id_chronogramme",
