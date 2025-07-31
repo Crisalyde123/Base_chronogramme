@@ -1,4 +1,4 @@
-from .db_utils import create_connection, init_databases
+from .db_utils import create_connection, init_databases, insert_chronogram_metadata
 from .mapping_utils import (
     detect_main_sheet,
     find_data_table,
@@ -18,4 +18,5 @@ __all__ = [
     "standardize_headers",
     "standardize_headers_rules",
     "PipelineLogger",
+    "insert_chronogram_metadata",
 ]

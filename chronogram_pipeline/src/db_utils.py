@@ -1,6 +1,7 @@
 from .logger import get_logger
 import sqlite3
-from datetime import datetime
+import unicodedata
+from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, Any
 
@@ -95,3 +96,68 @@ def insert_chronogram(record: Dict[str, Any], db_path: Path | None = None) -> in
         chrono_id = int(cur.lastrowid)
         logger.debug("Inserted chronogram with id %s", chrono_id)
         return chrono_id
+
+
+def _clean_string(value: Any) -> str:
+    """Return a trimmed ASCII representation of ``value``."""
+    text = "" if value is None else str(value).strip()
+    normalized = unicodedata.normalize("NFKD", text)
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
+def _format_date(value: Any) -> str:
+    """Return ``value`` formatted as ``YYYY-MM-DD`` when possible."""
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        value = value.strip()
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    return _clean_string(value)
+
+
+def insert_chronogram_metadata(metadata: Dict[str, Any], db_path: Path | None = None) -> int:
+    """Validate, clean and insert chronogram metadata.
+
+    Parameters
+    ----------
+    metadata : Dict[str, Any]
+        Raw metadata coming from the form submission.
+    db_path : Path, optional
+        SQLite database path. Defaults to ``DEFAULT_DB``.
+
+    Returns
+    -------
+    int
+        The generated ``id_chronogramme``.
+    """
+
+    required = [
+        "nom_chronogramme",
+        "date_exercice",
+        "lieu_exercice",
+        "etablissement_nom",
+        "etablissement_type",
+        "submitter",
+        "nom_fichier_excel",
+    ]
+    missing = [field for field in required if not metadata.get(field)]
+    if missing:
+        raise ValueError(f"Missing required metadata fields: {', '.join(missing)}")
+
+    record = {
+        "nom_chronogramme": _clean_string(metadata["nom_chronogramme"]),
+        "date_exercice": _format_date(metadata["date_exercice"]),
+        "lieu_exercice": _clean_string(metadata["lieu_exercice"]),
+        "etablissement_nom": _clean_string(metadata["etablissement_nom"]),
+        "etablissement_type": _clean_string(metadata["etablissement_type"]),
+        "submitter": _clean_string(metadata["submitter"]),
+        "date_soumission": datetime.utcnow().isoformat(),
+        "fichier_source": _clean_string(metadata["nom_fichier_excel"]),
+        "nb_injects": int(metadata.get("nb_injects", 0) or 0),
+    }
+
+    return insert_chronogram(record, db_path=db_path)
