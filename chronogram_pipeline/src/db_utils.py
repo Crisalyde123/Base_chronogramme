@@ -4,6 +4,7 @@ import unicodedata
 from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, Any
+import pandas as pd
 
 logger = get_logger(__name__)
 
@@ -161,3 +162,65 @@ def insert_chronogram_metadata(metadata: Dict[str, Any], db_path: Path | None = 
     }
 
     return insert_chronogram(record, db_path=db_path)
+
+
+def insert_injects(df, db_path: Path | None = None) -> int:
+    """Insert multiple injects from DataFrame and return number inserted."""
+    import pandas as pd
+
+    if df is None or len(df) == 0:
+        return 0
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas DataFrame")
+
+    db_path = db_path or DEFAULT_DB
+    columns = [
+        "id_chronogramme",
+        "id_inject",
+        "horodatage",
+        "description",
+        "emetteur",
+        "destinataire",
+        "type_inject",
+        "modalite",
+        "phase_exercice",
+        "observations",
+        "etablissement_nom",
+        "etablissement_type",
+    ]
+
+    rows = []
+    for _, row in df.iterrows():
+        entry = [row.get(col) for col in columns]
+        rows.append(entry)
+
+    placeholders = ", ".join("?" for _ in columns)
+    sql = f"INSERT INTO Injects ({', '.join(columns)}) VALUES ({placeholders})"
+
+    with create_connection(db_path) as conn:
+        init_tables(conn)
+        conn.executemany(sql, rows)
+        conn.commit()
+
+    logger.info("Inserted %s injects", len(rows))
+    return len(rows)
+
+
+def update_chronogram_stats(id_chronogramme: int, df, db_path: Path | None = None) -> None:
+    """Update nb_injects for a chronogram using DataFrame length."""
+    import pandas as pd
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas DataFrame")
+
+    nb_injects = len(df)
+    db_path = db_path or DEFAULT_DB
+    with create_connection(db_path) as conn:
+        init_tables(conn)
+        conn.execute(
+            "UPDATE Chronogrammes SET nb_injects = ? WHERE id_chronogramme = ?",
+            (nb_injects, id_chronogramme),
+        )
+        conn.commit()
+    logger.debug("Updated chronogram %s with %s injects", id_chronogramme, nb_injects)
+
