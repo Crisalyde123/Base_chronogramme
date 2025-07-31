@@ -18,16 +18,25 @@ SuggestFunc = Callable[[str, Iterable[str]], str]
 
 
 def _load_mapping(mapping_csv: Path) -> Mapping[str, str]:
-    if mapping_csv.exists() and mapping_csv.stat().st_size > 0:
+    """Return header mapping from *mapping_csv* with fallback for legacy encodings."""
+    if not (mapping_csv.exists() and mapping_csv.stat().st_size > 0):
+        return {}
+
+    try:
         df = pd.read_csv(mapping_csv)
-        return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1].astype(str)))
-    return {}
+    except UnicodeDecodeError:
+        # Some files may be created with the OS default encoding (e.g. Windows
+        # cp1252).  Retry with a more permissive codec.
+        with mapping_csv.open("r", encoding="latin1") as fh:
+            df = pd.read_csv(fh)
+
+    return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1].astype(str)))
 
 
 def _save_mapping(mapping_csv: Path, mapping: Mapping[str, str]) -> None:
     df = pd.DataFrame(list(mapping.items()), columns=["En-tête original", "En-tête standard"])
     mapping_csv.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(mapping_csv, index=False)
+    df.to_csv(mapping_csv, index=False, encoding="utf-8")
 
 
 def _load_schema(schema_path: Path | None) -> List[str]:
