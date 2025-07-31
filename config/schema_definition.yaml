@@ -1,0 +1,39 @@
+---
+fields:
+  - name: id_inject
+    type: string
+    required: true
+  - name: horodatage
+    type: string
+    required: false
+  - name: description
+    type: string
+    required: false
+  - name: emetteur
+    type: string
+    required: false
+  - name: destinataire
+    type: string
+    required: false
+  - name: type_inject
+    type: string
+    required: true
+    values: ["Critique", "Important", "Secondaire"]
+  - name: modalite
+    type: string
+    required: false
+  - name: phase_exercice
+    type: string
+    required: false
+  - name: observations
+    type: string
+    required: false
+  - name: etablissement_nom
+    type: string
+    required: false
+  - name: etablissement_type
+    type: string
+    required: false
+
+database:
+  engine: sqlite
