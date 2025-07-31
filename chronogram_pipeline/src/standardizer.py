@@ -51,12 +51,14 @@ def _load_mapping_normalized(mapping_csv: Path) -> Dict[str, str]:
 
 
 def _save_mapping(mapping_csv: Path, mapping: Mapping[str, str]) -> None:
+    """Write header ``mapping`` to ``mapping_csv`` in UTF-8."""
     df = pd.DataFrame(list(mapping.items()), columns=["En-tête original", "En-tête standard"])
     mapping_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(mapping_csv, index=False, encoding="utf-8")
 
 
 def _load_schema(schema_path: Path | None) -> List[str]:
+    """Return list of field names defined in the YAML schema."""
     if schema_path and schema_path.exists():
         data = yaml.safe_load(schema_path.read_text())
         fields = [f.get("name") for f in data.get("fields", [])]
@@ -100,6 +102,7 @@ def _append_mapping_log(
 
 
 def _default_mistral_call(header: str, allowed: Iterable[str]) -> str:
+    """Call the Mistral API to suggest a standard header."""
     api_key = os.getenv("MISTRAL_API_KEY")
     if not api_key:
         raise RuntimeError("MISTRAL_API_KEY not set")
@@ -233,12 +236,14 @@ def _load_value_mappings(yaml_path: Path) -> Dict[str, Dict[str, str]]:
 
 
 def _save_value_mappings(yaml_path: Path, mappings: Mapping[str, Mapping[str, str]]) -> None:
+    """Write ``mappings`` to ``yaml_path`` in YAML format."""
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
     with yaml_path.open("w", encoding="utf-8") as fh:
         yaml.safe_dump(mappings, fh, allow_unicode=True)
 
 
 def _load_allowed_values(schema_path: Path | None) -> Dict[str, List[str]]:
+    """Return allowed values per column as defined in ``schema_path``."""
     if not schema_path or not schema_path.exists():
         return {}
     data = yaml.safe_load(schema_path.read_text()) or {}
