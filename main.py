@@ -20,6 +20,7 @@ from chronogram_pipeline.src.logger import get_logger
 
 
 def _latest_xlsx(inputs_dir: Path) -> Path:
+    """Return the most recently modified ``.xlsx`` file in ``inputs_dir``."""
     files = [p for p in inputs_dir.glob("*.xlsx") if p.is_file()]
     if not files:
         raise FileNotFoundError(f"No .xlsx files found in {inputs_dir}")
@@ -27,6 +28,7 @@ def _latest_xlsx(inputs_dir: Path) -> Path:
 
 
 def _load_allowed(schema_path: Path | None) -> dict:
+    """Return allowed values dictionary parsed from the YAML schema."""
     if not schema_path or not schema_path.exists():
         return {}
     data = yaml.safe_load(schema_path.read_text()) or {}
@@ -38,7 +40,13 @@ def _load_allowed(schema_path: Path | None) -> dict:
     return allowed
 
 
-def standardize_column_values(df: pd.DataFrame, mapping_csv: Path, *, schema_path: Path | None = None) -> pd.DataFrame:
+def standardize_column_values(
+    df: pd.DataFrame,
+    mapping_csv: Path,
+    *,
+    schema_path: Path | None = None,
+) -> pd.DataFrame:
+    """Apply value mappings and filters to ``df`` columns."""
     df = df.copy()
     mapping = (
         pd.read_csv(mapping_csv)
@@ -66,6 +74,7 @@ def run_pipeline(
     logger_name: str | None = None,
     metadata: dict | None = None,
 ):
+    """Execute the full chronogram processing pipeline."""
     if config_dir is None:
         config_dir = Path(__file__).resolve().parent / "chronogram_pipeline" / "config"
     else:
@@ -189,6 +198,7 @@ def run_pipeline(
 
 
 def main() -> None:
+    """CLI entry point for the pipeline."""
     import argparse
     import sys
 

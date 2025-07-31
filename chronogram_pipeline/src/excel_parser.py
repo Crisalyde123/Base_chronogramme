@@ -21,6 +21,7 @@ def _count_non_empty(ws) -> int:
 
 
 def _contains_keyword(ws) -> bool:
+    """Return ``True`` if ``ws`` title or first cells contain a keyword."""
     title = ws.title.lower()
     if any(k in title for k in KEYWORDS):
         return True

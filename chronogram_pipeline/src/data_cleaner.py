@@ -37,6 +37,7 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     keywords = ("total", "phase")
 
     def is_parasitic(row) -> bool:
+        """Return ``True`` if ``row`` looks like a summary row."""
         cells = [
             str(c).strip().lower()
             for c in row
