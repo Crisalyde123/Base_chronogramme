@@ -6,6 +6,7 @@ from .mapping_utils import (
     update_mapping_headers,
 )
 from .standardizer import standardize_headers, standardize_headers_rules
+from .pipeline_logger import PipelineLogger
 
 __all__ = [
     "create_connection",
@@ -16,4 +17,5 @@ __all__ = [
     "update_mapping_headers",
     "standardize_headers",
     "standardize_headers_rules",
+    "PipelineLogger",
 ]
