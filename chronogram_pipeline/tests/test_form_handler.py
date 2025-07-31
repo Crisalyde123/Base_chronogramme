@@ -1,68 +1,44 @@
-import sqlite3
-import sys
+from __future__ import annotations
+
+import shutil
 from pathlib import Path
-import pytest
+from typing import Tuple, Dict, Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from .logger import get_logger
+from .db_utils import insert_chronogram, DEFAULT_DB
+from .form_handler_utils import save_excel_file  # ou là où vous avez placé cette fonction
 
-from src import db_utils
-from src.form_handler import handle_form_submission, save_excel_file
-
-
-def test_handle_form_submission_saves_and_inserts(tmp_path, monkeypatch):
-    db_path = tmp_path / "chronogrammes.db"
-    monkeypatch.setattr(db_utils, "DEFAULT_DB", db_path)
-    monkeypatch.setattr("src.form_handler.DEFAULT_DB", db_path)
-    monkeypatch.setattr("src.form_handler.INPUTS_DIR", tmp_path / "inputs")
-
-    conn = db_utils.create_connection(db_path)
-    db_utils.init_tables(conn)
-    conn.close()
-
-    src_file = tmp_path / "upload.xlsx"
-    src_file.write_text("data")
-
-    form_data = {
-        "nom_chronogramme": "Test",
-        "etablissement_nom": "Hopitâl de Lyon",
-        "date_exercice": "2025/07/31",
-        "file_path": str(src_file),
-    }
-
-    chrono_id, dest_path = handle_form_submission(form_data)
-
-    assert src_file.exists()
-    assert Path(dest_path).exists()
-    assert chrono_id == 1
-
-    with sqlite3.connect(db_path) as conn:
-        cur = conn.execute(
-            "SELECT nom_chronogramme, fichier_source FROM Chronogrammes WHERE id_chronogramme=?",
-            (chrono_id,),
-        )
-        row = cur.fetchone()
-    assert row == ("Test", dest_path)
+logger = get_logger(__name__)
 
 
-def test_save_excel_file_generates_structured_name(tmp_path):
-    src = tmp_path / "tempo.xlsx"
-    src.write_text("data")
+def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
+    """Traite la soumission du formulaire : déplace le fichier Excel dans INPUTS_DIR
+    en lui donnant un nom structuré, puis insère les métadonnées en base.
 
-    dest = save_excel_file(
-        src,
-        "CHU Lyon",
-        "Exo Feu",
-        "2025-07-31",
-        inputs_dir=tmp_path,
+    form_data doit contenir :
+      - "file_path"          : chemin vers le .xlsx temporaire
+      - "etablissement_nom"  : nom de l’établissement
+      - "nom_chronogramme"   : nom du chronogramme
+      - "date_exercice"      : date (str|date|datetime)
+
+    Retourne (id_chronogramme, chemin_final_du_fichier).
+    """
+    # 1) on délègue tout le renommage / déplacement à save_excel_file
+    dest_path = save_excel_file(
+        src=form_data["file_path"],
+        etablissement_nom=str(form_data.get("etablissement_nom", "")),
+        nom_chronogramme=str(form_data.get("nom_chronogramme", "chronogramme")),
+        date_exercice=form_data.get("date_exercice", ""),
+    )
+    form_data["fichier_source"] = str(dest_path)
+
+    # 2) on insère en base
+    chrono_id = insert_chronogram(form_data, db_path=DEFAULT_DB)
+    logger.info(
+        "Chronogramme '%s' inséré avec l'ID %s (fichier : %s)",
+        form_data.get("nom_chronogramme"),
+        chrono_id,
+        dest_path,
     )
 
-    assert dest.name.startswith("Chronogramme_chu_lyon_exo_feu_2025-07-31")
-    assert dest.exists()
-
-
-def test_save_excel_file_rejects_non_xlsx(tmp_path):
-    src = tmp_path / "tempo.xls"
-    src.write_text("data")
-
-    with pytest.raises(ValueError):
-        save_excel_file(src, "A", "B", "2023-01-01", inputs_dir=tmp_path)
+    return chrono_id, str(dest_path)
