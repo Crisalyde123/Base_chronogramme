@@ -6,6 +6,13 @@ from .mapping_utils import (
     update_mapping_headers,
 )
 from .standardizer import standardize_headers, standardize_headers_rules
+from .data_cleaner import (
+    clean_data,
+    drop_empty_cols,
+    drop_empty_rows,
+    remove_parasitic_rows,
+    unmerge_cells,
+)
 from .pipeline_logger import PipelineLogger
 
 __all__ = [
@@ -17,6 +24,11 @@ __all__ = [
     "update_mapping_headers",
     "standardize_headers",
     "standardize_headers_rules",
+    "unmerge_cells",
+    "drop_empty_rows",
+    "drop_empty_cols",
+    "remove_parasitic_rows",
+    "clean_data",
     "PipelineLogger",
     "insert_chronogram_metadata",
 ]
