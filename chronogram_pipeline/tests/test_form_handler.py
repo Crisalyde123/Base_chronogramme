@@ -7,8 +7,8 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Tuple, Dict, Any
 
-from .logger import get_logger
-from .db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
+from chronogram_pipeline.src.logger import get_logger
+from chronogram_pipeline.src.db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
 
 logger = get_logger(__name__)
 
