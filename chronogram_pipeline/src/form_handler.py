@@ -1,5 +1,3 @@
-"""Handle user form submission and store chronogram metadata."""
-
 from __future__ import annotations
 
 import re
@@ -14,14 +12,17 @@ from .db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
 
 logger = get_logger(__name__)
 
-INPUTS_DIR = BASE_DIR / "data/inputs"
+# Directory where uploaded files are stored
+INPUTS_DIR = BASE_DIR / "data" / "inputs"
 
 
 def _sanitize(name: str) -> str:
-    """Return a filesystem safe version of ``name``.
-
-    Accents and special characters are removed, spaces are replaced by
-    underscores and the result is lowercased.
+    """
+    Return a filesystem-safe version of `name`:
+    - strip accents & non-ASCII
+    - replace non-alphanumeric characters with underscores
+    - trim leading/trailing punctuation
+    - lowercase (fallback to 'chronogramme' if empty)
     """
     normalized = unicodedata.normalize("NFKD", name)
     ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
@@ -31,9 +32,15 @@ def _sanitize(name: str) -> str:
 
 
 def _format_date(value: str | datetime | date) -> str:
-    """Return ``value`` formatted as ``YYYY-MM-DD`` if possible."""
+    """
+    Return `value` formatted as `YYYY-MM-DD` if possible:
+    - If datetime/date, use strftime.
+    - If string, try ISO and common European formats.
+    - Otherwise, sanitize the raw string.
+    """
     if isinstance(value, (datetime, date)):
         return value.strftime("%Y-%m-%d")
+
     if isinstance(value, str):
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
             try:
@@ -41,7 +48,8 @@ def _format_date(value: str | datetime | date) -> str:
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 continue
-    return _sanitize(str(value))
+
+    return _sanitize(value)
 
 
 def save_excel_file(
@@ -51,8 +59,13 @@ def save_excel_file(
     date_exercice: str | datetime | date,
     inputs_dir: Path = INPUTS_DIR,
 ) -> Path:
-    """Copy ``src`` to ``inputs_dir`` with a structured unique file name."""
+    """
+    Copy `src` (.xlsx) into `inputs_dir` under a structured, unique filename:
+      Chronogramme_<etablissement>_<nom>_<date>.xlsx
 
+    Raises:
+        ValueError: if `src` is not an .xlsx file.
+    """
     src_path = Path(src)
     if src_path.suffix.lower() != ".xlsx":
         raise ValueError("Uploaded file must be a .xlsx Excel file")
@@ -64,9 +77,10 @@ def save_excel_file(
     date_str = _format_date(date_exercice)
 
     base_name = f"Chronogramme_{etab}_{nom}_{date_str}".strip("_")
-    dest_name = f"{base_name}.xlsx"
-    dest_path = inputs_dir / dest_name
+    dest_path = inputs_dir / f"{base_name}.xlsx"
+
     if dest_path.exists():
+        # avoid overwriting: append time suffix
         suffix = datetime.now().strftime("_%H%M%S")
         dest_path = inputs_dir / f"{base_name}{suffix}.xlsx"
 
@@ -76,32 +90,36 @@ def save_excel_file(
 
 
 def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
-    """Save uploaded Excel file and insert metadata.
-
-    Parameters
-    ----------
-    form_data : dict
-        Dictionary containing form fields and ``file_path`` key pointing to the
-        temporary uploaded Excel file.
-
-    Returns
-    -------
-    tuple
-        ``(id_chronogramme, final_path)`` where ``final_path`` is the path of
-        the stored Excel file.
     """
+    Process a form submission by:
+      1. Renaming & moving the uploaded Excel via save_excel_file()
+      2. Inserting its metadata into the DEFAULT_DB SQLite
 
+    Expects in `form_data`:
+      - "file_path"         : path to the temporary .xlsx
+      - "etablissement_nom" : establishment name (str)
+      - "nom_chronogramme"  : chronogram name (str)
+      - "date_exercice"     : date (str|date|datetime)
+
+    Returns:
+      (id_chronogramme, final_file_path)
+    """
+    # 1) Copy & rename file
     dest_path = save_excel_file(
-        form_data["file_path"],
-        str(form_data.get("etablissement_nom", "")),
-        str(form_data.get("nom_chronogramme", "chronogramme")),
-        form_data.get("date_exercice", ""),
+        src=form_data["file_path"],
+        etablissement_nom=str(form_data.get("etablissement_nom", "")),
+        nom_chronogramme=str(form_data.get("nom_chronogramme", "chronogramme")),
+        date_exercice=form_data.get("date_exercice", ""),
     )
-
     form_data["fichier_source"] = str(dest_path)
 
+    # 2) Insert metadata and retrieve ID
     chrono_id = insert_chronogram(form_data, db_path=DEFAULT_DB)
-    logger.info("Inserted chronogram %s with id %s", form_data.get("nom_chronogramme"), chrono_id)
+    logger.info(
+        "Chronogramme '%s' inserted with ID %s (file: %s)",
+        form_data.get("nom_chronogramme"),
+        chrono_id,
+        dest_path,
+    )
 
     return chrono_id, str(dest_path)
-
