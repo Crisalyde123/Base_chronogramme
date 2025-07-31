@@ -43,6 +43,10 @@ utilisez le script `scripts/run_all_inputs.py` :
 ```bash
 python scripts/run_all_inputs.py
 ```
+On peut aussi lui passer un dossier en argument :
+```bash
+python scripts/run_all_inputs.py /autre/dossier
+```
 
 ## Erreurs courantes
 

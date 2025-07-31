@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import scripts.run_all_inputs as batch
@@ -22,3 +23,16 @@ def test_process_all_invokes_pipeline(tmp_path, monkeypatch):
 
     assert calls == sorted(tmp_path.glob("*.xlsx"))
     assert results == [(tmp_path / "a.xlsx", 42), (tmp_path / "b.xlsx", 42)]
+
+
+def test_main_accepts_directory(tmp_path, monkeypatch, capsys):
+    (tmp_path / "a.xlsx").write_text("dummy")
+    monkeypatch.setattr(
+        "scripts.run_all_inputs.run_pipeline", lambda p: {"chrono_id": 1}
+    )
+    monkeypatch.setattr(sys, "argv", ["run_all_inputs", str(tmp_path)])
+
+    batch.main()
+
+    captured = capsys.readouterr().out
+    assert "a.xlsx: OK (1)" in captured
