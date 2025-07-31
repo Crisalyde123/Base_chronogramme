@@ -20,7 +20,7 @@ def _sanitize(name: str) -> str:
     """
     Return a filesystem-safe version of `name`:
     - strip accents & non-ASCII
-    - replace non-alphanum with underscores
+    - replace non-alphanumeric chars with underscores
     - trim leading/trailing punctuation
     - lowercase (fallback to 'chronogramme' if empty)
     """
@@ -33,9 +33,9 @@ def _sanitize(name: str) -> str:
 
 def _format_date(value: str | datetime | date) -> str:
     """
-    If `value` is a date/datetime, format as YYYY-MM-DD.
-    If `value` is a string, try ISO and common European formats.
-    Otherwise, sanitize as fallback.
+    If `value` is a datetime/date, return YYYY-MM-DD.
+    If it’s a string, try ISO and common European formats.
+    Otherwise, sanitize and return.
     """
     if isinstance(value, (datetime, date)):
         return value.strftime("%Y-%m-%d")
@@ -43,8 +43,7 @@ def _format_date(value: str | datetime | date) -> str:
     if isinstance(value, str):
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
             try:
-                dt = datetime.strptime(value, fmt)
-                return dt.strftime("%Y-%m-%d")
+                return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
             except ValueError:
                 continue
 
@@ -63,7 +62,7 @@ def save_excel_file(
       Chronogramme_<etablissement>_<nom>_<date>.xlsx
 
     Raises:
-      ValueError if `src` is not an .xlsx file.
+        ValueError: if src is not an .xlsx.
     """
     src_path = Path(src)
     if src_path.suffix.lower() != ".xlsx":
@@ -79,7 +78,7 @@ def save_excel_file(
     dest_path = inputs_dir / f"{base_name}.xlsx"
 
     if dest_path.exists():
-        # avoid overwriting: append timestamp
+        # append timestamp to avoid overwrite
         suffix = datetime.now().strftime("_%H%M%S")
         dest_path = inputs_dir / f"{base_name}{suffix}.xlsx"
 
@@ -90,15 +89,14 @@ def save_excel_file(
 
 def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
     """
-    Process a form submission by:
-      1. Renaming & moving the uploaded Excel via save_excel_file()
-      2. Inserting its metadata into the DEFAULT_DB SQLite
+    1. Rename & move uploaded Excel via save_excel_file()
+    2. Insert its metadata into the DEFAULT_DB SQLite
 
-    Expects in `form_data`:
-      - "file_path"         : path to the temporary .xlsx
-      - "etablissement_nom" : establishment name (str)
-      - "nom_chronogramme"  : chronogram name (str)
-      - "date_exercice"     : date (str|date|datetime)
+    Expects in form_data:
+      - file_path         : path to the temporary .xlsx
+      - etablissement_nom : establishment name (str)
+      - nom_chronogramme  : chronogram name (str)
+      - date_exercice     : date (str|date|datetime)
 
     Returns:
       (id_chronogramme, final_file_path)
@@ -112,7 +110,7 @@ def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
     )
     form_data["fichier_source"] = str(dest_path)
 
-    # 2) Insert metadata and retrieve ID
+    # 2) Insert metadata and get the new ID
     chrono_id = insert_chronogram(form_data, db_path=DEFAULT_DB)
     logger.info(
         "Chronogramme '%s' inserted with ID %s (file: %s)",
