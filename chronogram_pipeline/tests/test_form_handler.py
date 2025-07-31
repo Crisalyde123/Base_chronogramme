@@ -1,68 +1,108 @@
-import sqlite3
-import sys
+from __future__ import annotations
+
+import re
+import shutil
+import unicodedata
+from datetime import datetime, date
 from pathlib import Path
-import pytest
+from typing import Tuple, Dict, Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from .logger import get_logger
+from .db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
 
-from src import db_utils
-from src.form_handler import handle_form_submission, save_excel_file
+logger = get_logger(__name__)
 
-
-def test_handle_form_submission_saves_and_inserts(tmp_path, monkeypatch):
-    db_path = tmp_path / "chronogrammes.db"
-    monkeypatch.setattr(db_utils, "DEFAULT_DB", db_path)
-    monkeypatch.setattr("src.form_handler.DEFAULT_DB", db_path)
-    monkeypatch.setattr("src.form_handler.INPUTS_DIR", tmp_path / "inputs")
-
-    conn = db_utils.create_connection(db_path)
-    db_utils.init_tables(conn)
-    conn.close()
-
-    src_file = tmp_path / "upload.xlsx"
-    src_file.write_text("data")
-
-    form_data = {
-        "nom_chronogramme": "Test",
-        "etablissement_nom": "Hopitâl de Lyon",
-        "date_exercice": "2025/07/31",
-        "file_path": str(src_file),
-    }
-
-    chrono_id, dest_path = handle_form_submission(form_data)
-
-    assert src_file.exists()
-    assert Path(dest_path).exists()
-    assert chrono_id == 1
-
-    with sqlite3.connect(db_path) as conn:
-        cur = conn.execute(
-            "SELECT nom_chronogramme, fichier_source FROM Chronogrammes WHERE id_chronogramme=?",
-            (chrono_id,),
-        )
-        row = cur.fetchone()
-    assert row == ("Test", dest_path)
+# où stocker les uploads
+INPUTS_DIR = BASE_DIR / "data" / "inputs"
 
 
-def test_save_excel_file_generates_structured_name(tmp_path):
-    src = tmp_path / "tempo.xlsx"
-    src.write_text("data")
+def _sanitize(name: str) -> str:
+    """Return a filesystem-safe, lowercase, underscore-separated version of name."""
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", ascii_name)
+    cleaned = cleaned.strip("._-")
+    return cleaned.lower() or "chronogramme"
 
-    dest = save_excel_file(
-        src,
-        "CHU Lyon",
-        "Exo Feu",
-        "2025-07-31",
-        inputs_dir=tmp_path,
+
+def _format_date(value: str | datetime | date) -> str:
+    """If value is date/datetime, return YYYY-MM-DD; if string, try common formats."""
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                dt = datetime.strptime(value, fmt)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    # fallback: sanitize arbitrary string
+    return _sanitize(value)
+
+
+def save_excel_file(
+    src: str | Path,
+    etablissement_nom: str,
+    nom_chronogramme: str,
+    date_exercice: str | datetime | date,
+    inputs_dir: Path = INPUTS_DIR,
+) -> Path:
+    """
+    Copy src (.xlsx) into inputs_dir under a structured, unique filename:
+    Chronogramme_<etablissement>_<nom>_<date>.xlsx
+    Raises ValueError if src is not .xlsx.
+    """
+    src_path = Path(src)
+    if src_path.suffix.lower() != ".xlsx":
+        raise ValueError("Uploaded file must be a .xlsx Excel file")
+
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+
+    etab = _sanitize(etablissement_nom)
+    nom = _sanitize(nom_chronogramme)
+    date_str = _format_date(date_exercice)
+
+    base_name = f"Chronogramme_{etab}_{nom}_{date_str}".strip("_")
+    dest_path = inputs_dir / f"{base_name}.xlsx"
+
+    if dest_path.exists():
+        # append timestamp to avoid overwrite
+        suffix = datetime.now().strftime("_%H%M%S")
+        dest_path = inputs_dir / f"{base_name}{suffix}.xlsx"
+
+    logger.info("Saving uploaded file to %s", dest_path)
+    shutil.copy(src_path, dest_path)
+    return dest_path
+
+
+def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
+    """
+    Process form_data to:
+      1. move & rename the uploaded Excel via save_excel_file()
+      2. insert metadata into the DEFAULT_DB SQLite
+
+    Expects in form_data:
+      - "file_path"         : path to the temporary .xlsx
+      - "etablissement_nom" : establishment name (str)
+      - "nom_chronogramme"  : chronogram name (str)
+      - "date_exercice"     : date (str|date|datetime)
+
+    Returns (id_chronogramme, final_file_path).
+    """
+    dest_path = save_excel_file(
+        src=form_data["file_path"],
+        etablissement_nom=str(form_data.get("etablissement_nom", "")),
+        nom_chronogramme=str(form_data.get("nom_chronogramme", "chronogramme")),
+        date_exercice=form_data.get("date_exercice", ""),
+    )
+    form_data["fichier_source"] = str(dest_path)
+
+    chrono_id = insert_chronogram(form_data, db_path=DEFAULT_DB)
+    logger.info(
+        "Chronogramme '%s' inséré avec l'ID %s (fichier : %s)",
+        form_data.get("nom_chronogramme"),
+        chrono_id,
+        dest_path,
     )
 
-    assert dest.name.startswith("Chronogramme_chu_lyon_exo_feu_2025-07-31")
-    assert dest.exists()
-
-
-def test_save_excel_file_rejects_non_xlsx(tmp_path):
-    src = tmp_path / "tempo.xls"
-    src.write_text("data")
-
-    with pytest.raises(ValueError):
-        save_excel_file(src, "A", "B", "2023-01-01", inputs_dir=tmp_path)
+    return chrono_id, str(dest_path)

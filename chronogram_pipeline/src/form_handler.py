@@ -1,5 +1,3 @@
-"""Handle user form submission and store chronogram metadata."""
-
 from __future__ import annotations
 
 import re
@@ -18,11 +16,7 @@ INPUTS_DIR = BASE_DIR / "data/inputs"
 
 
 def _sanitize(name: str) -> str:
-    """Return a filesystem safe version of ``name``.
-
-    Accents and special characters are removed, spaces are replaced by
-    underscores and the result is lowercased.
-    """
+    """Return a filesystem-safe version of `name`."""
     normalized = unicodedata.normalize("NFKD", name)
     ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", ascii_name)
@@ -31,7 +25,7 @@ def _sanitize(name: str) -> str:
 
 
 def _format_date(value: str | datetime | date) -> str:
-    """Return ``value`` formatted as ``YYYY-MM-DD`` if possible."""
+    """Return `value` formatted as `YYYY-MM-DD` if possible."""
     if isinstance(value, (datetime, date)):
         return value.strftime("%Y-%m-%d")
     if isinstance(value, str):
@@ -41,7 +35,8 @@ def _format_date(value: str | datetime | date) -> str:
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 continue
-    return _sanitize(str(value))
+    # fallback: sanitize the raw string
+    return _sanitize(value)
 
 
 def save_excel_file(
@@ -51,8 +46,7 @@ def save_excel_file(
     date_exercice: str | datetime | date,
     inputs_dir: Path = INPUTS_DIR,
 ) -> Path:
-    """Copy ``src`` to ``inputs_dir`` with a structured unique file name."""
-
+    """Copy `src` to `inputs_dir` with a structured, unique file name."""
     src_path = Path(src)
     if src_path.suffix.lower() != ".xlsx":
         raise ValueError("Uploaded file must be a .xlsx Excel file")
@@ -64,9 +58,10 @@ def save_excel_file(
     date_str = _format_date(date_exercice)
 
     base_name = f"Chronogramme_{etab}_{nom}_{date_str}".strip("_")
-    dest_name = f"{base_name}.xlsx"
-    dest_path = inputs_dir / dest_name
+    dest_path = inputs_dir / f"{base_name}.xlsx"
+
     if dest_path.exists():
+        # avoid overwriting: append time suffix
         suffix = datetime.now().strftime("_%H%M%S")
         dest_path = inputs_dir / f"{base_name}{suffix}.xlsx"
 
@@ -76,32 +71,32 @@ def save_excel_file(
 
 
 def handle_form_submission(form_data: Dict[str, Any]) -> Tuple[int, str]:
-    """Save uploaded Excel file and insert metadata.
-
-    Parameters
-    ----------
-    form_data : dict
-        Dictionary containing form fields and ``file_path`` key pointing to the
-        temporary uploaded Excel file.
-
-    Returns
-    -------
-    tuple
-        ``(id_chronogramme, final_path)`` where ``final_path`` is the path of
-        the stored Excel file.
     """
+    Save the uploaded Excel file, insert its metadata into the DB,
+    and return (id_chronogramme, final_path).
 
+    Expects in form_data:
+      - "file_path"           : path to the temporary .xlsx
+      - "etablissement_nom"   : establishment name
+      - "nom_chronogramme"    : chronogram name
+      - "date_exercice"       : date (str|date|datetime)
+    """
+    # 1. Copy & rename the file
     dest_path = save_excel_file(
-        form_data["file_path"],
-        str(form_data.get("etablissement_nom", "")),
-        str(form_data.get("nom_chronogramme", "chronogramme")),
-        form_data.get("date_exercice", ""),
+        src=form_data["file_path"],
+        etablissement_nom=str(form_data.get("etablissement_nom", "")),
+        nom_chronogramme=str(form_data.get("nom_chronogramme", "chronogramme")),
+        date_exercice=form_data.get("date_exercice", ""),
     )
-
     form_data["fichier_source"] = str(dest_path)
 
+    # 2. Insert metadata and get the new ID
     chrono_id = insert_chronogram(form_data, db_path=DEFAULT_DB)
-    logger.info("Inserted chronogram %s with id %s", form_data.get("nom_chronogramme"), chrono_id)
+    logger.info(
+        "Chronogramme '%s' inséré avec l'ID %s (fichier : %s)",
+        form_data.get("nom_chronogramme"),
+        chrono_id,
+        dest_path,
+    )
 
     return chrono_id, str(dest_path)
-
