@@ -1,2 +1,3 @@
 __pycache__/
 *.db
+chronogram_pipeline/data/control/*.log
