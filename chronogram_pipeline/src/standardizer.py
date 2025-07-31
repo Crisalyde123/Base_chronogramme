@@ -159,11 +159,19 @@ def standardize_headers(
             base = file_name or "file"
             prompt_file = prompts_dir / f"{base}_header_{safe_header}.txt"
             prompt_file.write_text(prompt_text, encoding="utf-8")
-
             std = suggest(header_str, allowed)
             mapping[header_str] = std
             new_mapping = True
             method = "IA"
+            logger.info(
+                "IA header mapping",
+                extra={
+                    "event": "IA_CALL",
+                    "type": "header",
+                    "prompt": str(prompt_file.name),
+                    "response": std,
+                },
+            )
         log_rows.append((header_str, std, method))
         result.append(std)
 
