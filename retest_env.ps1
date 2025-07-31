@@ -5,7 +5,7 @@ Write-Host "=== 📦 Installation des dépendances ==="
 pip install -r requirements.txt
 
 Write-Host "`n=== 🛠 Initialisation des bases SQLite ==="
-python .\chronogram_pipeline\src\init_db.py
+python -m chronogram_pipeline.src.init_db
 
 Write-Host "`n=== 📂 Vérification des fichiers .db ==="
 Get-ChildItem .\chronogram_pipeline\output\databases

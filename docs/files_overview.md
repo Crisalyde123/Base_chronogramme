@@ -37,5 +37,6 @@ Contient le code principal du pipeline ainsi que les tests.
 - **`pipeline_logger.py`** et **`logger.py`** : configuration du logger JSON et gestion des messages durant l'exécution.
 - **`form_handler.py`** : traitement des formulaires côté front pour enregistrer un nouveau chronogramme.
 - **`manual_table_extractor.py`** : extraction manuelle d'une table lorsqu'aucune heuristique automatique ne fonctionne.
-- **`init_db.py`** : création initiale des bases de données et des tables.
+- **`init_db.py`** : création initiale des bases de données et des tables \
+  (à lancer avec `python -m chronogram_pipeline.src.init_db`).
 
