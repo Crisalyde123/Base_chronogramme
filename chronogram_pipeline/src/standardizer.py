@@ -40,8 +40,8 @@ def _load_mapping_normalized(mapping_csv: Path) -> Dict[str, str]:
     if mapping_csv.exists() and mapping_csv.stat().st_size > 0:
         df = pd.read_csv(mapping_csv)
         for _, row in df.iterrows():
-            orig = normalize_text(str(row[0]))
-            mapping[orig] = str(row[1])
+            orig = normalize_text(str(row.iloc[0]))
+            mapping[orig] = str(row.iloc[1])
     return mapping
 
 
