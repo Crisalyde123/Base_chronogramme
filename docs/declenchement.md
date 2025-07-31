@@ -35,6 +35,15 @@ Le fichier est stocké dans `data/inputs/` puis traité par `main.py`.
 
 Intégrez simplement l'appel à `main.py` dans votre tâche planifiée ou votre service. Veillez à ce que le `PYTHONPATH` pointe vers le projet et que le fichier Excel ainsi que les métadonnées soient accessibles. L'appel se fait avec les mêmes arguments que ci‑dessus.
 
+## 4. Traitement en lot des échantillons
+
+Pour exécuter la chaîne complète sur tous les fichiers `.xlsx` présents dans `data/inputs/`,
+utilisez le script `scripts/run_all_inputs.py` :
+
+```bash
+python scripts/run_all_inputs.py
+```
+
 ## Erreurs courantes
 
 - **Fichier manquant ou extension incorrecte** : `FileNotFoundError` ou `ValueError` si l'argument `--file` ne désigne pas un `.xlsx` existant.

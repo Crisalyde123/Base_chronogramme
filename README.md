@@ -11,3 +11,10 @@ Chaque lancement du pipeline crée un fichier `run_<horodatage>.log` dans `chron
 ## Déclenchement du pipeline
 
 Les différentes méthodes pour lancer le traitement (formulaire, ligne de commande ou appel automatisé) sont détaillées dans [docs/declenchement.md](docs/declenchement.md).
+
+Pour exécuter le pipeline sur tous les fichiers d'exemple présents dans `data/inputs/`,
+lancez simplement :
+
+```bash
+python scripts/run_all_inputs.py
+```
