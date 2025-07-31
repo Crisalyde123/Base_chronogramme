@@ -7,8 +7,13 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Tuple, Dict, Any
 
-from chronogram_pipeline.src.logger import get_logger
-from chronogram_pipeline.src.db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
+import sys
+
+# allow imports when running tests from this directory
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.logger import get_logger
+from src.db_utils import insert_chronogram, DEFAULT_DB, BASE_DIR
 
 logger = get_logger(__name__)
 
