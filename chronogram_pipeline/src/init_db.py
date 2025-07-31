@@ -1,7 +1,15 @@
 """Script to initialise SQLite databases for the chronogram pipeline."""
 from pathlib import Path
 
-from db_utils import init_databases
+try:
+    # allow execution with `python -m chronogram_pipeline.src.init_db`
+    from .db_utils import init_databases
+except ImportError:  # pragma: no cover - fallback for direct execution
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parent))
+    from db_utils import init_databases  # type: ignore
+
 from .logger import get_logger
 
 logger = get_logger(__name__)
