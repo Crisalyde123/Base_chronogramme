@@ -13,7 +13,9 @@ from chronogram_pipeline.src import (
     db_utils,
     mapping_utils,
     PipelineLogger,
+    enrich_data,
 )
+from chronogram_pipeline.src.logger import get_logger
 
 
 def _latest_xlsx(inputs_dir: Path) -> Path:
@@ -60,6 +62,7 @@ def run_pipeline(
     config_dir: Path | None = None,
     log_dir: Path | None = None,
     db_path: Path | None = None,
+    logger_name: str | None = None,
 ):
     if config_dir is None:
         config_dir = Path(__file__).resolve().parent / "chronogram_pipeline" / "config"
@@ -73,7 +76,7 @@ def run_pipeline(
         os.environ["CHRONO_LOG_DIR"] = str(log_dir)
     mapping_log = Path(os.getenv("CHRONO_LOG_DIR", config_dir)) / "mappings_log.xlsx"
 
-    plog = PipelineLogger("main_pipeline")
+    plog = PipelineLogger(logger_name or "main_pipeline")
 
     with plog.step("SELECT_FILE"):
         inputs_dir = db_utils.BASE_DIR / "data" / "inputs"
@@ -136,7 +139,23 @@ def run_pipeline(
         df_clean.columns = headers
 
     with plog.step("STANDARDIZE_VALUES"):
-        df_final = standardize_column_values(df_clean, mapping_values, schema_path=schema_yaml)
+        df_std = standardize_column_values(df_clean, mapping_values, schema_path=schema_yaml)
+
+    with plog.step("ENRICH_DATA") as m:
+        df_enriched = enrich_data(
+            df_std,
+            id_chronogramme=chrono_id,
+            etablissement_nom=metadata["etablissement_nom"],
+            etablissement_type=metadata["etablissement_type"],
+            nom_chronogramme=metadata["nom_chronogramme"],
+            date_exercice=metadata["date_exercice"],
+        )
+        m["rows"] = len(df_enriched)
+
+    with plog.step("INSERT_INJECTS") as m:
+        inserted = db_utils.insert_injects(df_enriched, db_path=db_path)
+        db_utils.update_chronogram_stats(chrono_id, df_enriched, db_path=db_path)
+        m["inserted"] = inserted
 
     plog.summary()
 
@@ -151,7 +170,8 @@ def run_pipeline(
         "chrono_id": chrono_id,
         "raw_df": df_raw,
         "clean_df": df_clean,
-        "df": df_final,
+        "df": df_std,
+        "enriched_df": df_enriched,
         "log_file": log_file,
         "mapping_log": mapping_log,
     }
@@ -159,11 +179,21 @@ def run_pipeline(
 
 def main() -> None:
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description="Run chronogram pipeline")
     parser.add_argument("file", nargs="?", help="Excel file to process")
     args = parser.parse_args()
-    run_pipeline(args.file)
+    logger = get_logger("main")
+    try:
+        result = run_pipeline(args.file, logger_name="main")
+    except Exception as exc:  # pragma: no cover - CLI handling
+        logger.exception("Pipeline failed")
+        print(f"\u00c9CHEC : {exc}")
+        sys.exit(1)
+    else:
+        print(f"SUCC\u00c8S : {result['chrono_id']}")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
