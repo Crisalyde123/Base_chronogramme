@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Dict
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -13,6 +14,10 @@ from .logger import get_logger
 from .mapping_utils import normalize_text
 
 logger = get_logger(__name__)
+
+# Default path for the mappings log file
+CONTROL_DIR = Path(os.getenv("CHRONO_LOG_DIR", Path(__file__).resolve().parents[1] / "data/control"))
+DEFAULT_MAPPING_LOG = CONTROL_DIR / "mappings_log.xlsx"
 
 # Type of the callback used to suggest a header
 SuggestFunc = Callable[[str, Iterable[str]], str]
@@ -59,6 +64,41 @@ def _load_schema(schema_path: Path | None) -> List[str]:
     return []
 
 
+def _append_mapping_log(
+    rows: Iterable[tuple[str, str, str]],
+    log_path: Path,
+    *,
+    chrono_id: int | None = None,
+) -> None:
+    """Append mapping *rows* to *log_path* with optional chronogram id."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    columns = [
+        "id_chronogramme",
+        "nom_original",
+        "champ_standard",
+        "methode",
+        "horodatage",
+    ]
+
+    if log_path.exists():
+        df_log = pd.read_excel(log_path)
+    else:
+        df_log = pd.DataFrame(columns=columns)
+
+    for orig, std, method in rows:
+        df_log.loc[len(df_log)] = [
+            chrono_id if chrono_id is not None else "",
+            normalize_text(orig),
+            normalize_text(std),
+            method,
+            timestamp,
+        ]
+
+    df_log.to_excel(log_path, index=False)
+
+
 def _default_mistral_call(header: str, allowed: Iterable[str]) -> str:
     api_key = os.getenv("MISTRAL_API_KEY")
     if not api_key:
@@ -86,6 +126,7 @@ def standardize_headers_rules(
     *,
     mapping_csv: Path,
     log_xlsx: Path | None = None,
+    id_chronogramme: int | None = None,
 ) -> List[str]:
     """Standardize headers using only local dictionary rules."""
     mapping = _load_mapping_normalized(mapping_csv)
@@ -102,16 +143,8 @@ def standardize_headers_rules(
         log_rows.append((header_str, std, "règle"))
         result.append(std)
 
-    if log_xlsx:
-        if log_xlsx.exists():
-            df_log = pd.read_excel(log_xlsx)
-        else:
-            df_log = pd.DataFrame(
-                columns=["En-tête original", "En-tête standard", "Méthode"]
-            )
-        for row in log_rows:
-            df_log.loc[len(df_log)] = row
-        df_log.to_excel(log_xlsx, index=False)
+    log_file = log_xlsx or DEFAULT_MAPPING_LOG
+    _append_mapping_log(log_rows, log_file, chrono_id=id_chronogramme)
 
     for orig, std, method in log_rows:
         logger.info("Header '%s' -> '%s' via %s", orig, std, method)
@@ -128,6 +161,7 @@ def standardize_headers(
     gpt_suggest_header: SuggestFunc | None = None,
     file_name: str | None = None,
     log_xlsx: Path | None = None,
+    id_chronogramme: int | None = None,
 ) -> List[str]:
     """Return list of standardized headers using dictionary and optional AI."""
     mapping = _load_mapping(mapping_csv)
@@ -178,14 +212,8 @@ def standardize_headers(
     if new_mapping:
         _save_mapping(mapping_csv, mapping)
 
-    if log_xlsx:
-        if log_xlsx.exists():
-            df_log = pd.read_excel(log_xlsx)
-        else:
-            df_log = pd.DataFrame(columns=["En-tête original", "En-tête standard", "Méthode"])
-        for row in log_rows:
-            df_log.loc[len(df_log)] = row
-        df_log.to_excel(log_xlsx, index=False)
+    log_file = log_xlsx or DEFAULT_MAPPING_LOG
+    _append_mapping_log(log_rows, log_file, chrono_id=id_chronogramme)
 
     for orig, std, method in log_rows:
         logger.info("Header '%s' -> '%s' via %s", orig, std, method)
