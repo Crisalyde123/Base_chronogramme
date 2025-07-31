@@ -220,3 +220,142 @@ def standardize_headers(
 
     return result
 
+
+def _load_value_mappings(yaml_path: Path) -> Dict[str, Dict[str, str]]:
+    """Load per-column value mappings from YAML with normalized keys."""
+    if not yaml_path.exists():
+        return {}
+    data = yaml.safe_load(yaml_path.read_text()) or {}
+    mappings: Dict[str, Dict[str, str]] = {}
+    for col, vals in data.items():
+        mappings[col] = {normalize_text(str(k)): str(v) for k, v in (vals or {}).items()}
+    return mappings
+
+
+def _save_value_mappings(yaml_path: Path, mappings: Mapping[str, Mapping[str, str]]) -> None:
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    with yaml_path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(mappings, fh, allow_unicode=True)
+
+
+def _load_allowed_values(schema_path: Path | None) -> Dict[str, List[str]]:
+    if not schema_path or not schema_path.exists():
+        return {}
+    data = yaml.safe_load(schema_path.read_text()) or {}
+    allowed: Dict[str, List[str]] = {}
+    for field in data.get("fields", []):
+        name = field.get("name")
+        values = field.get("values")
+        if name and values:
+            allowed[str(name)] = [str(v) for v in values]
+    return allowed
+
+
+def standardize_values(
+    col_name: str,
+    series: pd.Series,
+    *,
+    mappings: Dict[str, Dict[str, str]],
+    allowed: Iterable[str] = (),
+    mapping_yaml: Path,
+    prompts_dir: Path,
+    gpt_suggest_value: SuggestFunc | None = None,
+    file_name: str | None = None,
+    log_xlsx: Path | None = None,
+    id_chronogramme: int | None = None,
+) -> pd.Series:
+    """Standardize values of one column using dictionary and optional AI."""
+
+    mapping = mappings.get(col_name, {})
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    suggest = gpt_suggest_value or _default_mistral_call
+    new_mapping = False
+    result = []
+    log_rows = []
+
+    for val in series:
+        if pd.isna(val):
+            result.append(val)
+            continue
+        raw = str(val).strip()
+        norm = normalize_text(raw)
+        if norm in mapping and mapping[norm]:
+            std = mapping[norm]
+            method = "dict"
+        elif raw in allowed:
+            std = raw
+            method = "ok"
+        else:
+            prompt_text = (
+                f"Dans le champ \"{col_name}\", comment standardiser la valeur \"{raw}\" ? "
+                f"Liste autorisee : [{', '.join(allowed)}]"
+            )
+            safe_val = raw.replace("/", "_").replace(" ", "_")
+            base = file_name or "file"
+            prompt_file = prompts_dir / f"{base}_{col_name}_{safe_val}.txt"
+            prompt_file.write_text(prompt_text, encoding="utf-8")
+            std = suggest(raw, allowed)
+            mapping[norm] = std
+            mappings[col_name] = mapping
+            new_mapping = True
+            method = "IA"
+            logger.info(
+                "IA value mapping",
+                extra={
+                    "event": "IA_CALL",
+                    "type": "value",
+                    "prompt": str(prompt_file.name),
+                    "response": std,
+                },
+            )
+        log_rows.append((raw, std, method))
+        result.append(std)
+
+    if new_mapping:
+        _save_value_mappings(mapping_yaml, mappings)
+
+    log_file = log_xlsx or DEFAULT_MAPPING_LOG
+    _append_mapping_log(log_rows, log_file, chrono_id=id_chronogramme)
+
+    for orig, std, method in log_rows:
+        logger.info("Value '%s' -> '%s' via %s", orig, std, method)
+
+    return pd.Series(result, index=series.index)
+
+
+def standardize_column_values(
+    df: pd.DataFrame,
+    *,
+    mapping_yaml: Path,
+    schema_path: Path | None = None,
+    prompts_dir: Path | None = None,
+    gpt_suggest_value: SuggestFunc | None = None,
+    file_name: str | None = None,
+    log_xlsx: Path | None = None,
+    id_chronogramme: int | None = None,
+) -> pd.DataFrame:
+    """Standardize values of all columns in *df* using mappings and optional AI."""
+
+    mappings = _load_value_mappings(mapping_yaml)
+    allowed_all = _load_allowed_values(schema_path)
+    prompts_dir = prompts_dir or Path("prompts")
+
+    for col in list(df.columns):
+        if col not in mappings and col not in allowed_all:
+            continue
+        allowed = allowed_all.get(col, [])
+        df[col] = standardize_values(
+            col,
+            df[col],
+            mappings=mappings,
+            allowed=allowed,
+            mapping_yaml=mapping_yaml,
+            prompts_dir=prompts_dir,
+            gpt_suggest_value=gpt_suggest_value,
+            file_name=file_name,
+            log_xlsx=log_xlsx,
+            id_chronogramme=id_chronogramme,
+        )
+
+    return df
+
