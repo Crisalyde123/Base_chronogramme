@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from datetime import datetime
+import json
 import pandas as pd
 import openpyxl
 import yaml
@@ -63,6 +64,7 @@ def run_pipeline(
     log_dir: Path | None = None,
     db_path: Path | None = None,
     logger_name: str | None = None,
+    metadata: dict | None = None,
 ):
     if config_dir is None:
         config_dir = Path(__file__).resolve().parent / "chronogram_pipeline" / "config"
@@ -88,16 +90,25 @@ def run_pipeline(
             raise FileNotFoundError(xlsx_file)
 
     with plog.step("INSERT_METADATA") as m:
-        metadata = {
-            "nom_chronogramme": xlsx_file.stem,
-            "date_exercice": datetime.now().strftime("%Y-%m-%d"),
-            "lieu_exercice": "N/A",
-            "etablissement_nom": "Auto",
-            "etablissement_type": "N/A",
-            "submitter": "pipeline",
-            "nom_fichier_excel": xlsx_file.name,
-        }
-        chrono_id = db_utils.insert_chronogram_metadata(metadata, db_path=db_path)
+        if metadata is None:
+            metadata = {
+                "nom_chronogramme": xlsx_file.stem,
+                "date_exercice": datetime.now().strftime("%Y-%m-%d"),
+                "lieu_exercice": "N/A",
+                "etablissement_nom": "Auto",
+                "etablissement_type": "N/A",
+                "submitter": "pipeline",
+            }
+        meta_rec = dict(metadata)
+        meta_rec["nom_fichier_excel"] = xlsx_file.name
+        meta_rec.setdefault("nom_chronogramme", xlsx_file.stem)
+        meta_rec.setdefault("date_exercice", datetime.now().strftime("%Y-%m-%d"))
+        meta_rec.setdefault("lieu_exercice", "N/A")
+        meta_rec.setdefault("etablissement_nom", "Auto")
+        meta_rec.setdefault("etablissement_type", "N/A")
+        meta_rec.setdefault("submitter", "pipeline")
+        metadata = meta_rec
+        chrono_id = db_utils.insert_chronogram_metadata(meta_rec, db_path=db_path)
         m["chrono_id"] = chrono_id
 
     with plog.step("DETECT_SHEET"):
@@ -183,10 +194,25 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Run chronogram pipeline")
     parser.add_argument("file", nargs="?", help="Excel file to process")
+    parser.add_argument(
+        "--meta",
+        help="Metadata as JSON string or path to JSON file",
+    )
     args = parser.parse_args()
+    metadata = None
+    if args.meta:
+        try:
+            meta_arg = Path(args.meta)
+            if meta_arg.is_file():
+                metadata = json.loads(meta_arg.read_text())
+            else:
+                metadata = json.loads(args.meta)
+        except Exception as exc:  # pragma: no cover - CLI handling
+            print(f"M\u00e9tadonn\u00e9es invalides: {exc}")
+            sys.exit(1)
     logger = get_logger("main")
     try:
-        result = run_pipeline(args.file, logger_name="main")
+        result = run_pipeline(args.file, logger_name="main", metadata=metadata)
     except Exception as exc:  # pragma: no cover - CLI handling
         logger.exception("Pipeline failed")
         print(f"\u00c9CHEC : {exc}")
