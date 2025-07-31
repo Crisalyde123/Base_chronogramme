@@ -19,6 +19,7 @@ from .data_cleaner import (
     unmerge_cells,
 )
 from .pipeline_logger import PipelineLogger
+from .enricher import enrich_data
 
 __all__ = [
     "create_connection",
@@ -38,4 +39,5 @@ __all__ = [
     "clean_data",
     "PipelineLogger",
     "insert_chronogram_metadata",
+    "enrich_data",
 ]
