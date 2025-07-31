@@ -3,13 +3,14 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import Callable, Iterable, List, Mapping
+from typing import Callable, Iterable, List, Mapping, Dict
 
 import pandas as pd
 import requests
 import yaml
 
 from .logger import get_logger
+from .mapping_utils import normalize_text
 
 logger = get_logger(__name__)
 
@@ -22,6 +23,17 @@ def _load_mapping(mapping_csv: Path) -> Mapping[str, str]:
         df = pd.read_csv(mapping_csv)
         return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1].astype(str)))
     return {}
+
+
+def _load_mapping_normalized(mapping_csv: Path) -> Dict[str, str]:
+    """Load mapping with normalized keys for rule-based matching."""
+    mapping: Dict[str, str] = {}
+    if mapping_csv.exists() and mapping_csv.stat().st_size > 0:
+        df = pd.read_csv(mapping_csv)
+        for _, row in df.iterrows():
+            orig = normalize_text(str(row[0]))
+            mapping[orig] = str(row[1])
+    return mapping
 
 
 def _save_mapping(mapping_csv: Path, mapping: Mapping[str, str]) -> None:
@@ -58,6 +70,44 @@ def _default_mistral_call(header: str, allowed: Iterable[str]) -> str:
     resp.raise_for_status()
     data = resp.json()
     return data["choices"][0]["message"]["content"].strip()
+
+
+def standardize_headers_rules(
+    headers_list: Iterable[str],
+    *,
+    mapping_csv: Path,
+    log_xlsx: Path | None = None,
+) -> List[str]:
+    """Standardize headers using only local dictionary rules."""
+    mapping = _load_mapping_normalized(mapping_csv)
+    result: List[str] = []
+    log_rows = []
+
+    for header in headers_list:
+        header_str = "" if header is None else str(header).strip()
+        if not header_str:
+            result.append(header_str)
+            continue
+        norm = normalize_text(header_str)
+        std = mapping.get(norm, "")
+        log_rows.append((header_str, std, "règle"))
+        result.append(std)
+
+    if log_xlsx:
+        if log_xlsx.exists():
+            df_log = pd.read_excel(log_xlsx)
+        else:
+            df_log = pd.DataFrame(
+                columns=["En-tête original", "En-tête standard", "Méthode"]
+            )
+        for row in log_rows:
+            df_log.loc[len(df_log)] = row
+        df_log.to_excel(log_xlsx, index=False)
+
+    for orig, std, method in log_rows:
+        logger.info("Header '%s' -> '%s' via %s", orig, std, method)
+
+    return result
 
 
 def standardize_headers(
