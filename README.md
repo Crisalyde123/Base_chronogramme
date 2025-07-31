@@ -7,6 +7,8 @@ Ce dépôt contient l'orchestration complète : extraction des fichiers Excel, 
 
 Chaque lancement du pipeline crée un fichier `run_<horodatage>.log` dans `chronogram_pipeline/data/control/`. Ces journaux sont au format JSON et contiennent les messages techniques ainsi que les métriques de chaque étape du traitement. Ils permettent de tracer précisément les actions réalisées, notamment les appels à l'IA lors de la standardisation des en‑têtes.
 
+Un script de suivi `scripts/monitor_kpi.py` agrège ces journaux et le fichier `mappings_log.xlsx` afin de générer un rapport `monitoring_log.md` avec les principaux indicateurs (taux d'automatisation, recours à l'IA, complétude des données...).
+
 
 ## Déclenchement du pipeline
 
