@@ -17,7 +17,9 @@ from .mapping_utils import normalize_text
 logger = get_logger(__name__)
 
 # Default path for the mappings log file
-CONTROL_DIR = Path(os.getenv("CHRONO_LOG_DIR", Path(__file__).resolve().parents[1] / "data/control"))
+CONTROL_DIR = Path(
+    os.getenv("CHRONO_LOG_DIR", Path(__file__).resolve().parents[1] / "data/control")
+)
 DEFAULT_MAPPING_LOG = CONTROL_DIR / "mappings_log.xlsx"
 
 # Type of the callback used to suggest a header
@@ -53,7 +55,9 @@ def _load_mapping_normalized(mapping_csv: Path) -> Dict[str, str]:
 
 def _save_mapping(mapping_csv: Path, mapping: Mapping[str, str]) -> None:
     """Write header ``mapping`` to ``mapping_csv`` in UTF-8."""
-    df = pd.DataFrame(list(mapping.items()), columns=["En-tête original", "En-tête standard"])
+    df = pd.DataFrame(
+        list(mapping.items()), columns=["En-tête original", "En-tête standard"]
+    )
     mapping_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(mapping_csv, index=False, encoding="utf-8", quoting=csv.QUOTE_MINIMAL)
 
@@ -71,7 +75,7 @@ def _append_mapping_log(
     rows: Iterable[tuple[str, str, str]],
     log_path: Path,
     *,
-    chrono_id: int | None = None,
+    chrono_id: str | None = None,
 ) -> None:
     """Append mapping *rows* to *log_path* with optional chronogram id."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,7 +123,12 @@ def _default_mistral_call(header: str, allowed: Iterable[str]) -> str:
         "model": "mistral-small",
         "messages": [{"role": "user", "content": prompt}],
     }
-    resp = requests.post("https://api.mistral.ai/v1/chat/completions", headers=headers, json=payload, timeout=30)
+    resp = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=30,
+    )
     resp.raise_for_status()
     data = resp.json()
     return data["choices"][0]["message"]["content"].strip()
@@ -130,7 +139,7 @@ def standardize_headers_rules(
     *,
     mapping_csv: Path,
     log_xlsx: Path | None = None,
-    id_chronogramme: int | None = None,
+    id_chronogramme: str | None = None,
 ) -> List[str]:
     """Standardize headers using only local dictionary rules."""
     mapping = _load_mapping_normalized(mapping_csv)
@@ -165,7 +174,7 @@ def standardize_headers(
     gpt_suggest_header: SuggestFunc | None = None,
     file_name: str | None = None,
     log_xlsx: Path | None = None,
-    id_chronogramme: int | None = None,
+    id_chronogramme: str | None = None,
 ) -> List[str]:
     """Return list of standardized headers using dictionary and optional AI."""
     mapping = _load_mapping(mapping_csv)
@@ -232,11 +241,15 @@ def _load_value_mappings(yaml_path: Path) -> Dict[str, Dict[str, str]]:
     data = yaml.safe_load(yaml_path.read_text()) or {}
     mappings: Dict[str, Dict[str, str]] = {}
     for col, vals in data.items():
-        mappings[col] = {normalize_text(str(k)): str(v) for k, v in (vals or {}).items()}
+        mappings[col] = {
+            normalize_text(str(k)): str(v) for k, v in (vals or {}).items()
+        }
     return mappings
 
 
-def _save_value_mappings(yaml_path: Path, mappings: Mapping[str, Mapping[str, str]]) -> None:
+def _save_value_mappings(
+    yaml_path: Path, mappings: Mapping[str, Mapping[str, str]]
+) -> None:
     """Write ``mappings`` to ``yaml_path`` in YAML format."""
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
     with yaml_path.open("w", encoding="utf-8") as fh:
@@ -268,7 +281,7 @@ def standardize_values(
     gpt_suggest_value: SuggestFunc | None = None,
     file_name: str | None = None,
     log_xlsx: Path | None = None,
-    id_chronogramme: int | None = None,
+    id_chronogramme: str | None = None,
 ) -> pd.Series:
     """Standardize values of one column using dictionary and optional AI."""
 
@@ -293,7 +306,7 @@ def standardize_values(
             method = "ok"
         else:
             prompt_text = (
-                f"Dans le champ \"{col_name}\", comment standardiser la valeur \"{raw}\" ? "
+                f'Dans le champ "{col_name}", comment standardiser la valeur "{raw}" ? '
                 f"Liste autorisee : [{', '.join(allowed)}]"
             )
             safe_val = raw.replace("/", "_").replace(" ", "_")
@@ -338,7 +351,7 @@ def standardize_column_values(
     gpt_suggest_value: SuggestFunc | None = None,
     file_name: str | None = None,
     log_xlsx: Path | None = None,
-    id_chronogramme: int | None = None,
+    id_chronogramme: str | None = None,
 ) -> pd.DataFrame:
     """Standardize values of all columns in *df* using mappings and optional AI."""
 
@@ -364,4 +377,3 @@ def standardize_column_values(
         )
 
     return df
-

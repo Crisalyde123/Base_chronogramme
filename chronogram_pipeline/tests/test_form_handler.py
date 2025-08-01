@@ -22,10 +22,7 @@ def test_save_excel_file(tmp_path):
     assert dest.exists()
     assert dest.parent == tmp_path
     assert dest.read_text() == "dummy"
-    assert (
-        dest.name
-        == "Chronogramme_hopital_general_chrono_demo_2024-02-01.xlsx"
-    )
+    assert dest.name == "Chronogramme_hopital_general_chrono_demo_2024-02-01.xlsx"
 
 
 def test_handle_form_submission_saves_and_inserts(tmp_path, monkeypatch):
@@ -60,13 +57,10 @@ def test_handle_form_submission_saves_and_inserts(tmp_path, monkeypatch):
     chrono_id, dest = form_handler.handle_form_submission(form_data.copy())
 
     dest_path = Path(dest)
-    assert isinstance(chrono_id, int)
+    assert isinstance(chrono_id, str)
     assert dest_path.exists()
     assert dest_path.parent == inputs_dir
-    assert (
-        dest_path.name
-        == "Chronogramme_etablissement_demo_plan_a_b_2024-02-01.xlsx"
-    )
+    assert dest_path.name == "Chronogramme_etablissement_demo_plan_a_b_2024-02-01.xlsx"
 
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
@@ -74,4 +68,3 @@ def test_handle_form_submission_saves_and_inserts(tmp_path, monkeypatch):
         ).fetchone()
 
     assert row == (chrono_id, str(dest_path))
-

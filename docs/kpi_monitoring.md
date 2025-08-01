@@ -17,7 +17,7 @@ Soit `N` le nombre total d'éléments considérés pour un traitement (en‑têt
   où `N_{vide}` est le nombre d'éléments n'ayant reçu aucune correspondance.
 - **Complétude des injects** :
   \[\text{completude} = \frac{\text{nombre de cellules renseignées}}{\text{nombre total de cellules attendues}}\]
-  Le calcul exclut les colonnes techniques `id_inject_global` et `id_chronogramme`.
+  Le calcul exclut la colonne technique `id_chronogramme`.
 
 ## Seuils d'alerte
 

@@ -17,7 +17,7 @@ def test_standardize_headers_rules(tmp_path):
     headers = ["Descriptif", "destinataires", "Inconnu"]
 
     out = standardize_headers_rules(
-        headers, mapping_csv=mapping_csv, log_xlsx=log_xlsx, id_chronogramme=42
+        headers, mapping_csv=mapping_csv, log_xlsx=log_xlsx, id_chronogramme="C042"
     )
 
     assert out == ["Contenu", "Recepteur", ""]
@@ -31,5 +31,5 @@ def test_standardize_headers_rules(tmp_path):
         "horodatage",
     ]
     assert df.shape[0] == 3
-    assert set(df["id_chronogramme"]) == {42}
+    assert set(df["id_chronogramme"]) == {"C042"}
     assert (df["methode"] == "règle").all()

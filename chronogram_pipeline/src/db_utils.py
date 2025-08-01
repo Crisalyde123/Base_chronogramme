@@ -16,7 +16,7 @@ DEFAULT_DB = DB_DIR / "chronogrammes.db"
 
 CHRONO_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS Chronogrammes (
-    id_chronogramme INTEGER PRIMARY KEY,
+    id_chronogramme TEXT PRIMARY KEY,
     nom_chronogramme TEXT NOT NULL,
     date_exercice TEXT,
     lieu_exercice TEXT,
@@ -31,8 +31,7 @@ CREATE TABLE IF NOT EXISTS Chronogrammes (
 
 INJECTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS Injects (
-    id_inject_global INTEGER PRIMARY KEY,
-    id_chronogramme INTEGER NOT NULL,
+    id_chronogramme TEXT NOT NULL,
     id_inject TEXT,
     horodatage TEXT,
     description TEXT,
@@ -49,12 +48,14 @@ CREATE TABLE IF NOT EXISTS Injects (
 );
 """
 
+
 def create_connection(db_path: Path) -> sqlite3.Connection:
     """Create a SQLite connection enabling foreign keys."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
 
 def init_tables(conn: sqlite3.Connection) -> None:
     """Create Chronogrammes and Injects tables."""
@@ -76,12 +77,23 @@ def init_databases(chronogram_db: Path, injects_db: Path) -> None:
     logger.info("Databases initialised: %s, %s", chronogram_db, injects_db)
 
 
-def insert_chronogram(record: Dict[str, Any], db_path: Path | None = None) -> int:
+def insert_chronogram(record: Dict[str, Any], db_path: Path | None = None) -> str:
     """Insert a chronogram record and return its generated ID."""
     db_path = db_path or DEFAULT_DB
     with create_connection(db_path) as conn:
         init_tables(conn)
+        cur = conn.execute("SELECT id_chronogramme FROM Chronogrammes")
+        ids = [row[0] for row in cur.fetchall()]
+        next_num = (
+            max(
+                (int(i[1:]) for i in ids if isinstance(i, str) and i[1:].isdigit()),
+                default=0,
+            )
+            + 1
+        )
+        chrono_id = f"C{next_num:03d}"
         columns = [
+            "id_chronogramme",
             "nom_chronogramme",
             "date_exercice",
             "lieu_exercice",
@@ -92,12 +104,24 @@ def insert_chronogram(record: Dict[str, Any], db_path: Path | None = None) -> in
             "fichier_source",
             "nb_injects",
         ]
-        values = [record.get(col) for col in columns]
+        values = [
+            chrono_id,
+            record.get("nom_chronogramme"),
+            record.get("date_exercice"),
+            record.get("lieu_exercice"),
+            record.get("etablissement_nom"),
+            record.get("etablissement_type"),
+            record.get("submitter"),
+            record.get("date_soumission"),
+            record.get("fichier_source"),
+            record.get("nb_injects"),
+        ]
         placeholders = ", ".join("?" for _ in columns)
-        sql = f"INSERT INTO Chronogrammes ({', '.join(columns)}) VALUES ({placeholders})"
-        cur = conn.execute(sql, values)
+        sql = (
+            f"INSERT INTO Chronogrammes ({', '.join(columns)}) VALUES ({placeholders})"
+        )
+        conn.execute(sql, values)
         conn.commit()
-        chrono_id = int(cur.lastrowid)
         logger.debug("Inserted chronogram with id %s", chrono_id)
         return chrono_id
 
@@ -123,7 +147,9 @@ def _format_date(value: Any) -> str:
     return _clean_string(value)
 
 
-def insert_chronogram_metadata(metadata: Dict[str, Any], db_path: Path | None = None) -> int:
+def insert_chronogram_metadata(
+    metadata: Dict[str, Any], db_path: Path | None = None
+) -> str:
     """Validate, clean and insert chronogram metadata.
 
     Parameters
@@ -135,7 +161,7 @@ def insert_chronogram_metadata(metadata: Dict[str, Any], db_path: Path | None = 
 
     Returns
     -------
-    int
+    str
         The generated ``id_chronogramme``.
     """
 
@@ -209,7 +235,7 @@ def insert_injects(df, db_path: Path | None = None) -> int:
     return len(rows)
 
 
-def delete_chronogram(id_chronogramme: int, db_path: Path | None = None) -> None:
+def delete_chronogram(id_chronogramme: str, db_path: Path | None = None) -> None:
     """Remove chronogram and related injects from the database."""
     db_path = db_path or DEFAULT_DB
     with create_connection(db_path) as conn:
@@ -226,7 +252,9 @@ def delete_chronogram(id_chronogramme: int, db_path: Path | None = None) -> None
     logger.warning("Deleted chronogram %s with no injects", id_chronogramme)
 
 
-def update_chronogram_stats(id_chronogramme: int, df, db_path: Path | None = None) -> None:
+def update_chronogram_stats(
+    id_chronogramme: str, df, db_path: Path | None = None
+) -> None:
     """Update nb_injects for a chronogram using DataFrame length."""
     import pandas as pd
 
@@ -248,7 +276,7 @@ def update_chronogram_stats(id_chronogramme: int, df, db_path: Path | None = Non
 def archive_file(
     file_path: Path,
     *,
-    chrono_id: int | None = None,
+    chrono_id: str | None = None,
     archive_dir: Path | None = None,
 ) -> Path:
     """Move ``file_path`` to the archive directory with a timestamped name.
@@ -257,7 +285,7 @@ def archive_file(
     ----------
     file_path : Path
         Excel file that has been successfully processed.
-    chrono_id : int, optional
+    chrono_id : str, optional
         Chronogram identifier used to build the archive filename.
     archive_dir : Path, optional
         Destination directory. Defaults to ``data/archive/raw_excels`` in the
@@ -284,4 +312,3 @@ def archive_file(
     shutil.move(str(file_path), dest)
     logger.info("Archived %s to %s", file_path, dest)
     return dest
-

@@ -11,9 +11,9 @@ def test_archive_file_moves(tmp_path):
     src.write_text("dummy")
     archive_dir = tmp_path / "arc"
 
-    dest = archive_file(src, chrono_id=1, archive_dir=archive_dir)
+    dest = archive_file(src, chrono_id="C001", archive_dir=archive_dir)
 
     assert dest.exists()
     assert dest.parent == archive_dir
     assert not src.exists()
-    assert "1" in dest.stem
+    assert "C001" in dest.stem
