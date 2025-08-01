@@ -44,3 +44,6 @@ Vous pouvez aussi indiquer un autre dossier contenant des fichiers Excel :
 ```bash
 python scripts/run_all_inputs.py /chemin/vers/mes_fichiers
 ```
+Pour une automatisation complète, le script `scripts/process_new_inputs.py`
+traite tous les fichiers présents dans `data/inputs/` puis les déplace
+automatiquement dans `data/archive/raw_excels/`.

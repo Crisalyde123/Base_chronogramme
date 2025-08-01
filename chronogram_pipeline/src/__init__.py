@@ -1,4 +1,9 @@
-from .db_utils import create_connection, init_databases, insert_chronogram_metadata
+from .db_utils import (
+    create_connection,
+    init_databases,
+    insert_chronogram_metadata,
+    archive_file,
+)
 from .mapping_utils import (
     detect_main_sheet,
     find_data_table,
@@ -39,5 +44,6 @@ __all__ = [
     "clean_data",
     "PipelineLogger",
     "insert_chronogram_metadata",
+    "archive_file",
     "enrich_data",
 ]
