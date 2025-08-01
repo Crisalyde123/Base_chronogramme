@@ -1,11 +1,12 @@
-import logging
 from pathlib import Path
 from typing import Union
+
+from .logger import get_logger
 
 from openpyxl import load_workbook, Workbook
 import warnings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 KEYWORDS = {"chronogramme", "exercice"}
 

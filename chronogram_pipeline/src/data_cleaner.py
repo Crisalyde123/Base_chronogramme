@@ -10,6 +10,9 @@ import csv
 import pandas as pd
 
 from .mapping_utils import normalize_text
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_column_mapping(path_ref: Path) -> Dict[str, str]:
@@ -18,6 +21,7 @@ def load_column_mapping(path_ref: Path) -> Dict[str, str]:
         pd.DataFrame(columns=["raw_name", "mapped_name"]).to_csv(
             path_ref, index=False, quoting=csv.QUOTE_MINIMAL
         )
+        logger.info("Created column mapping file %s", path_ref)
         return {}
 
     df = pd.read_csv(path_ref)
@@ -39,6 +43,8 @@ def load_column_mapping(path_ref: Path) -> Dict[str, str]:
             mapping[raw] = "__DROP__"
         else:
             mapping[raw] = mapped
+
+    logger.debug("Loaded %d column mappings from %s", len(mapping), path_ref)
     return mapping
 
 
@@ -48,6 +54,7 @@ def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
         pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"]).to_csv(
             path_ref, index=False, quoting=csv.QUOTE_MINIMAL
         )
+        logger.info("Created value mapping file %s", path_ref)
         return {}
 
     df = pd.read_csv(path_ref)
@@ -68,12 +75,14 @@ def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
             continue
         mapping.setdefault(col, {})[raw] = mapped
 
+    logger.debug("Loaded value mapping for %d columns from %s", len(mapping), path_ref)
     return mapping
 
 
 def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
     """Propagate merged cell values vertically and horizontally."""
     result = df.copy()
+    logger.debug("Unmerging cells for dataframe with shape %s", df.shape)
 
     # Forward-fill downwards first to handle vertical merges
     result = result.ffill()
@@ -92,24 +101,29 @@ def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
 def drop_empty_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Remove rows that are completely empty or contain only blanks."""
     df = df.copy()
+    before = len(df)
     df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
     df.dropna(axis=0, how="all", inplace=True)
+    logger.debug("Dropped %d empty rows", before - len(df))
     return df
 
 
 def drop_empty_cols(df: pd.DataFrame) -> pd.DataFrame:
     """Remove columns that contain no data below the header row."""
     df = df.copy()
+    before = len(df.columns)
     df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
     data = df.iloc[1:] if len(df) > 1 else df
     empty = [col for col in df.columns if data[col].isna().all()]
     df.drop(columns=empty, inplace=True)
+    logger.debug("Dropped %d empty columns", before - len(df.columns))
     return df
 
 
 def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Drop rows like 'TOTAL' or 'Phase X' that do not contain data."""
     df = df.copy()
+    before = len(df)
     keywords = ("total", "phase")
 
     def is_parasitic(row) -> bool:
@@ -126,6 +140,7 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
 
     mask = df.apply(is_parasitic, axis=1)
     df = df[~mask]
+    logger.debug("Removed %d parasitic rows", before - len(df))
     return df
 
 
@@ -144,6 +159,7 @@ def _append_new_columns(path_ref: Path, columns: Iterable[str]) -> None:
 
     df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+    logger.info("Appended %d new columns to %s", len(columns), path_ref)
 
 
 def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
@@ -163,6 +179,7 @@ def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
             }
     df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+    logger.info("Appended %d new values to %s", len(rows), path_ref)
 
 
 def _apply_mappings(
@@ -175,10 +192,12 @@ def _apply_mappings(
 ) -> pd.DataFrame:
     """Rename columns and replace values using provided mappings."""
     df = df.copy()
+    logger.debug("Applying mappings to dataframe with columns: %s", list(df.columns))
 
     unknown_cols = [c for c in df.columns if c not in column_map]
     if unknown_cols:
         _append_new_columns(columns_file, unknown_cols)
+        logger.warning("Unknown columns encountered: %s", unknown_cols)
         raise StopIteration("Nouveau nom de colonne à mapper")
 
     rename: Dict[str, str] = {}
@@ -214,6 +233,7 @@ def _apply_mappings(
 
         if new_vals:
             _append_new_values(values_file, [(col, v) for v in new_vals])
+            logger.warning("Unknown values for column '%s': %s", col, new_vals)
             raise StopIteration("Nouvelles valeurs à mapper")
 
     return df
@@ -247,6 +267,7 @@ def _validate_values(df: pd.DataFrame) -> None:
             return mapping.get(key, pd.NA)
 
         df[col] = df[col].map(convert)
+        logger.debug("Validated values for column '%s'", col)
 
     if "horodatage" in df.columns:
         def parse_ts(val):
@@ -258,6 +279,7 @@ def _validate_values(df: pd.DataFrame) -> None:
             return ts.strftime("%Y-%m-%dT%H:%M:%S")
 
         df["horodatage"] = df["horodatage"].map(parse_ts)
+        logger.debug("Normalized horodatage column")
 
 
 def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -280,11 +302,13 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     cleaned = df.loc[~mask].reset_index(drop=True)
     if cleaned.empty and not df.empty:
         return df.reset_index(drop=True)
+    logger.debug("Dropped %d repeated rows", len(df) - len(cleaned))
     return cleaned
 
 
 def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
     """Standardize columns and add identifier columns."""
+    logger.debug("Standardising dataframe with columns: %s", list(df.columns))
 
     mapping = {
         "phase": "phase",
@@ -342,6 +366,7 @@ def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataF
     data.insert(1, "numero", numeros)
     data.insert(2, "id_inject", [f"{chrono_id}_{n}" for n in numeros])
     data.replace({pd.NA: None}, inplace=True)
+    logger.debug("Added identifiers with chrono_id %s", chrono_id)
 
     return data
 
@@ -356,6 +381,7 @@ def clean_data(
     values_file: Path | None = None,
 ) -> pd.DataFrame:
     """Return ``df`` cleaned, optionally using manual mappings."""
+    logger.info("Starting data cleaning pipeline")
     df = unmerge_cells(df)
     df = drop_empty_rows(df)
     df = drop_empty_cols(df)
@@ -372,4 +398,5 @@ def clean_data(
         )
 
     df = standardize_and_clean(df, chrono_rank=chrono_rank)
+    logger.info("Data cleaning complete: %d rows, %d columns", len(df), len(df.columns))
     return df
