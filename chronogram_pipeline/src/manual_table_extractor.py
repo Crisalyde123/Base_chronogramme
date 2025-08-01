@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
+from .logger import get_logger
+
+logger = get_logger(__name__)
+
 
 KNOWN_HEADERS = [
     "Heure",
@@ -40,6 +44,7 @@ def detect_header_row(lines: List[List[str]]) -> int:
     for idx, row in enumerate(lines):
         matches = sum(_norm(cell) in { _norm(h) for h in KNOWN_HEADERS } for cell in row)
         if matches >= 2:
+            logger.debug("Detected header row at index %d", idx)
             return idx
     return 0
 
@@ -66,6 +71,7 @@ def map_headers(headers: List[str]) -> List[Tuple[str, str]]:
     for h in headers:
         std = rules.get(_norm(h), "Inconnu")
         mapping.append((h, std))
+    logger.debug("Mapped headers: %s", mapping)
     return mapping
 
 

@@ -11,6 +11,10 @@ from src.data_cleaner import (
     standardize_and_clean,
     load_column_mapping,
     load_value_mapping,
+    drop_empty_rows,
+    drop_empty_cols,
+    remove_parasitic_rows,
+    _validate_values,
 )
 
 
@@ -86,6 +90,7 @@ def test_standardize_and_clean_invalid_value():
     out = standardize_and_clean(df)
     # Une valeur non reconnue devient NaN
     assert pd.isna(out["statut"].iloc[0])
+
 
 # Helpers for mapping tests
 
@@ -168,3 +173,38 @@ def test_clean_data_new_value(tmp_path):
     df_new = pd.read_csv(val_file)
     rows = set(df_new.itertuples(index=False, name=None))
     assert any(r[0] == "alpha" and r[1] == "foo" and r[2] == "XXX" and r[3] == "test2" for r in rows)
+
+
+def test_drop_empty_rows_cols_and_parasitic():
+    df = pd.DataFrame(
+        {
+            "A": ["", None, "data"],
+            "B": [None, None, ""],
+            "C": ["TOTAL", "phase 1", "x"],
+        }
+    )
+    out = drop_empty_rows(df)
+    out = drop_empty_cols(out)
+    out = remove_parasitic_rows(out)
+    assert list(out.columns) == ["A", "C"]
+    assert out.shape[0] == 1
+    assert out.iloc[0]["C"] == "x"
+
+
+def test_validate_values_normalizes(tmp_path):
+    df = pd.DataFrame(
+        {
+            "phase": ["1", "cinq"],
+            "statut": ["Joue", "inval"],
+            "type": ["Structurant", "foo"],
+            "nature": ["SMS", "Oral"],
+            "horodatage": ["01/02/2024 08:00", "bad"],
+        }
+    )
+    _validate_values(df)
+    assert list(df["phase"]) == ["1", pd.NA]
+    assert list(df["statut"]) == ["joué", pd.NA]
+    assert list(df["type"]) == ["structurant", pd.NA]
+    assert list(df["nature"]) == ["SMS", "oral"]
+    assert df["horodatage"].iloc[0] == "2024-02-01T08:00:00"
+    assert pd.isna(df["horodatage"].iloc[1])
