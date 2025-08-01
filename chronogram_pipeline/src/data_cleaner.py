@@ -262,7 +262,7 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         values = [
             str(row[c]).strip()
             for c in cols
-            if c in row and not pd.isna(row[c]) and str(row[c]).strip() != ""
+            if c in row.index and pd.notna(row[c]) and str(row[c]).strip() != ""
         ]
         if not values:
             return False
@@ -272,7 +272,10 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         return max(counts.values()) >= 6
 
     mask = df.apply(is_repeat, axis=1)
-    return df.loc[~mask].reset_index(drop=True)
+    cleaned = df.loc[~mask].reset_index(drop=True)
+    if cleaned.empty and not df.empty:
+        return df.reset_index(drop=True)
+    return cleaned
 
 
 def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:

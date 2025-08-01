@@ -225,7 +225,7 @@ description du rôle de chaque composant :
     chronogram_pipeline/               ← Répertoire racine du projet
     ├── README.md                     ← Documentation du projet (description générale, instructions d’exécution)
     ├── requirements.txt              ← Liste des dépendances Python (ex: pandas, openpyxl, openai, etc.)
-    ├── config/                       ← Configuration et ressources statiques
+    ├── chronogram_pipeline/config/                       ← Configuration et ressources statiques
     │   ├── mapping_headers.csv       ← Fichier de correspondance des en-têtes (non standard → standard)
     │   ├── mapping_values.csv        ← Fichier de correspondance des valeurs (colonnes concaténées ou séparées, voir description ci-dessous)
     │   └── schema_definition.yaml    ← (Optionnel) Schéma cible et paramètres (liste des champs standards attendus, types, etc.)
@@ -272,7 +272,7 @@ description du rôle de chaque composant :
     `python-dotenv` pour gérer la clé API, etc.). Le projet cherche à
     limiter les dépendances au strict nécessaire pour rester léger.
 
--   **config/** : Ce dossier regroupe les fichiers de configuration et
+-   **chronogram_pipeline/config/** : Ce dossier regroupe les fichiers de configuration et
     de référence utilisés par le pipeline :
 
 -   `mapping_headers.csv` est un fichier CSV (éditable sous Excel)
@@ -2118,7 +2118,7 @@ if: always()
 chronogram_pipeline/\
 ├── README.md\
 ├── requirements.txt\
-├── config/\
+├── chronogram_pipeline/config/\
 ├── data/\
 ├── output/\
 ├── src/\
