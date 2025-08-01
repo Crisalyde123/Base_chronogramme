@@ -490,10 +490,62 @@ def run_pipeline(
 
     db_path = Path(db_path) if db_path else DEFAULT_DB
 
-    # Load Excel and clean
+    # Load Excel and standardize column headers/values using config mappings
     sheet = detect_main_sheet(excel_path)
     df = pd.read_excel(excel_path, sheet_name=sheet)
-    clean_df = clean_data(df, chrono_rank=1)
+
+    headers_csv = config_dir / "mapping_headers.csv"
+    values_csv = config_dir / "mapping_values.csv"
+
+    if headers_csv.exists():
+        headers_df = pd.read_csv(headers_csv, dtype=str)
+        header_map = {
+            str(o): str(s)
+            for o, s in zip(
+                headers_df.get("En-tete original", []),
+                headers_df.get("En-tete standard", []),
+            )
+            if str(o) and str(s)
+        }
+        if header_map:
+            df = df.rename(columns=header_map)
+
+            # merge duplicate columns produced by the mapping
+            for col in list({c for c in df.columns if list(df.columns).count(c) > 1}):
+                dupes = [c for c in df.columns if c == col]
+                base = dupes[0]
+                for d in dupes[1:]:
+                    df[base] = df[base].fillna(df[d])
+                df.drop(columns=dupes[1:], inplace=True)
+
+    value_map: Dict[str, Dict[str, str]] = {}
+    if values_csv.exists():
+        values_df = pd.read_csv(values_csv, dtype=str)
+        for _, row in values_df.iterrows():
+            col = str(row.get("Colonne", ""))
+            raw = str(row.get("Valeur brute", ""))
+            std = str(row.get("Valeur standard", ""))
+            if col and raw:
+                value_map.setdefault(col, {})[raw] = std
+        for col, mapping in value_map.items():
+            if col in df.columns:
+                df[col] = df[col].map(lambda v: mapping.get(str(v).strip(), v))
+
+    clean_df = clean_data(
+        df,
+        chrono_rank=1,
+    )
+
+    column_renames = {
+        "phase": "phase_exercice",
+        "type": "type_inject",
+        "nature": "modalite",
+        "resume": "description",
+        "commentaires": "observations",
+    }
+    for src, dest in column_renames.items():
+        if src in clean_df.columns and dest not in clean_df.columns:
+            clean_df = clean_df.rename(columns={src: dest})
 
     if clean_df.empty:
         # Ensure tables exist for the test expectations
