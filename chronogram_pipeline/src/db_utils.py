@@ -209,6 +209,23 @@ def insert_injects(df, db_path: Path | None = None) -> int:
     return len(rows)
 
 
+def delete_chronogram(id_chronogramme: int, db_path: Path | None = None) -> None:
+    """Remove chronogram and related injects from the database."""
+    db_path = db_path or DEFAULT_DB
+    with create_connection(db_path) as conn:
+        init_tables(conn)
+        conn.execute(
+            "DELETE FROM Injects WHERE id_chronogramme = ?",
+            (id_chronogramme,),
+        )
+        conn.execute(
+            "DELETE FROM Chronogrammes WHERE id_chronogramme = ?",
+            (id_chronogramme,),
+        )
+        conn.commit()
+    logger.warning("Deleted chronogram %s with no injects", id_chronogramme)
+
+
 def update_chronogram_stats(id_chronogramme: int, df, db_path: Path | None = None) -> None:
     """Update nb_injects for a chronogram using DataFrame length."""
     import pandas as pd
