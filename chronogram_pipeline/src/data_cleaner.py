@@ -8,8 +8,18 @@ import pandas as pd
 def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
     """Propagate merged cell values vertically and horizontally."""
     result = df.copy()
-    result.ffill(inplace=True)
-    result.ffill(axis=1, inplace=True)
+
+    # Forward-fill downwards first to handle vertical merges
+    result = result.ffill()
+
+    # ``result`` might be a Series if ``df`` was not a DataFrame.  ``Series``
+    # does not support ``ffill`` with ``axis`` so convert it to a single-row
+    # DataFrame before applying the horizontal fill.
+    if isinstance(result, pd.Series):
+        result = result.to_frame().T
+
+    # Propagate values horizontally (left -> right)
+    result = result.ffill(axis=1)
     return result
 
 
