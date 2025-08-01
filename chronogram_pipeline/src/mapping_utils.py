@@ -3,6 +3,7 @@ import pandas as pd
 import unicodedata
 import logging
 import warnings
+import csv
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -116,7 +117,7 @@ def enrich_mapping_values(input_dir: Path, header_map_path: Path, values_path: P
                     existing.add(key)
                     added_lines += 1
     values_df.drop_duplicates(inplace=True)
-    values_df.to_csv(values_path, index=False)
+    values_df.to_csv(values_path, index=False, quoting=csv.QUOTE_MINIMAL)
     logger.info("%d columns inspected", cols_inspected)
     logger.info("%d new raw values added", added_lines)
     logger.info("%d total lines now in %s", len(values_df), values_path)
@@ -214,6 +215,6 @@ def update_mapping_headers(input_dir: Path, mapping_csv: Path, max_files: int = 
         df.loc[len(df)] = [header, ""]
 
     if new_entries:
-        df.to_csv(mapping_csv, index=False)
+        df.to_csv(mapping_csv, index=False, quoting=csv.QUOTE_MINIMAL)
     logger.info("%d headers extracted, %d new entries added", total_headers, len(new_entries))
     return total_headers, len(new_entries)
