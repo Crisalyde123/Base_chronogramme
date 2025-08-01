@@ -1,249 +1,412 @@
-# Entry point for chronogram pipeline
-import os
-from pathlib import Path
+from __future__ import annotations
+
 from datetime import datetime
-import json
+from pathlib import Path
+from typing import Dict, Iterable
+
 import pandas as pd
-import openpyxl
-import yaml
 
-from chronogram_pipeline.src import (
-    data_cleaner,
-    excel_parser,
-    db_utils,
-    mapping_utils,
-    PipelineLogger,
-    enrich_data,
-    apply_schema_columns,
-)
-from chronogram_pipeline.src.logger import get_logger
+from .mapping_utils import normalize_text
 
 
-def _latest_xlsx(inputs_dir: Path) -> Path:
-    """Return the most recently modified ``.xlsx`` file in ``inputs_dir``."""
-    files = [p for p in inputs_dir.glob("*.xlsx") if p.is_file()]
-    if not files:
-        raise FileNotFoundError(f"No .xlsx files found in {inputs_dir}")
-    return max(files, key=lambda p: p.stat().st_mtime)
+def _norm(value: str) -> str:
+    """Return normalized key: lowercase, accentless without spaces."""
+    return normalize_text(value).replace(" ", "")
 
 
-def _load_allowed(schema_path: Path | None) -> dict:
-    """Return allowed values dictionary parsed from the YAML schema."""
-    if not schema_path or not schema_path.exists():
+def load_column_mapping(path_ref: Path) -> Dict[str, str]:
+    """Return column name mapping from CSV file at ``path_ref``."""
+    if not path_ref.exists():
+        pd.DataFrame(
+            columns=["raw_name", "mapped_name", "nom_chronogramme"]
+        ).to_csv(path_ref, index=False)
         return {}
-    data = yaml.safe_load(schema_path.read_text()) or {}
-    allowed = {}
-    for field in data.get("fields", []):
-        vals = field.get("values")
-        if vals:
-            allowed[str(field.get("name"))] = [str(v) for v in vals]
-    return allowed
+
+    df = pd.read_csv(path_ref, dtype=str)
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
+
+    df["norm"] = df["raw_name"].astype(str).map(_norm)
+    df.sort_values(by=["norm"], inplace=True)
+    df.drop_duplicates(subset=["norm"], keep="first", inplace=True)
+    df.drop(columns=["norm"], inplace=True)
+    df.to_csv(path_ref, index=False)
+
+    mapping: Dict[str, str] = {}
+    for _, row in df.iterrows():
+        raw = str(row.get("raw_name", ""))
+        mapped = "" if pd.isna(row.get("mapped_name")) else str(row.get("mapped_name"))
+        if mapped == "XXX":
+            continue
+        key = _norm(raw)
+        mapping[key] = "__DROP__" if mapped == "" else mapped
+
+    return mapping
 
 
-def standardize_column_values(
-    df: pd.DataFrame,
-    mapping_csv: Path,
-    *,
-    schema_path: Path | None = None,
-) -> pd.DataFrame:
-    """Apply value mappings and filters to ``df`` columns."""
+def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
+    """Return per-column value mapping from CSV file at ``path_ref``."""
+    if not path_ref.exists():
+        pd.DataFrame(
+            columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"]
+        ).to_csv(path_ref, index=False)
+        return {}
+
+    df = pd.read_csv(path_ref, dtype=str)
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
+
+    df["norm_col"] = df["column_name"].astype(str).map(_norm)
+    df["norm_val"] = df["raw_value"].astype(str).map(_norm)
+    df.sort_values(by=["norm_col", "norm_val"], inplace=True)
+    df.drop_duplicates(subset=["norm_col", "norm_val"], keep="first", inplace=True)
+    df.drop(columns=["norm_col", "norm_val"], inplace=True)
+    df.to_csv(path_ref, index=False)
+
+    mapping: Dict[str, Dict[str, str]] = {}
+    for _, row in df.iterrows():
+        col = str(row.get("column_name", ""))
+        raw = str(row.get("raw_value", ""))
+        mapped = "" if pd.isna(row.get("mapped_value")) else str(row.get("mapped_value"))
+        if mapped == "XXX":
+            continue
+        mapping.setdefault(_norm(col), {})[_norm(raw)] = mapped
+
+    return mapping
+
+
+def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
+    """Propagate merged cell values vertically and horizontally."""
+    result = df.copy()
+
+    # Forward-fill downwards first to handle vertical merges
+    result = result.ffill()
+
+    # ``result`` might be a Series if ``df`` was not a DataFrame.  ``Series``
+    # does not support ``ffill`` with ``axis`` so convert it to a single-row
+    # DataFrame before applying the horizontal fill.
+    if isinstance(result, pd.Series):
+        result = result.to_frame().T
+
+    # Propagate values horizontally (left -> right)
+    result = result.ffill(axis=1)
+    return result
+
+
+def drop_empty_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove rows that are completely empty or contain only blanks."""
     df = df.copy()
-    mapping = (
-        pd.read_csv(mapping_csv)
-        if mapping_csv.exists() and mapping_csv.stat().st_size > 0
-        else pd.DataFrame(columns=["Colonne", "Valeur brute", "Valeur standard"])
-    )
-    allowed = _load_allowed(schema_path)
-    for col in df.columns:
-        sub = mapping[mapping["Colonne"] == col]
-        if not sub.empty:
-            replace = dict(zip(sub["Valeur brute"].astype(str), sub["Valeur standard"].astype(str)))
-            df[col] = df[col].astype(str).replace(replace)
-        if col in allowed:
-            df[col] = df[col].astype(str)
-            df = df[df[col].isin(allowed[col])]
-    return df.reset_index(drop=True)
+    df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
+    df.dropna(axis=0, how="all", inplace=True)
+    return df
 
 
-def run_pipeline(
-    xlsx_path: str | Path | None = None,
-    *,
-    config_dir: Path | None = None,
-    log_dir: Path | None = None,
-    db_path: Path | None = None,
-    logger_name: str | None = None,
-    metadata: dict | None = None,
-):
-    """Execute the full chronogram processing pipeline."""
-    if config_dir is None:
-        config_dir = Path(__file__).resolve().parent / "chronogram_pipeline" / "config"
+def drop_empty_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove columns that contain no data below the header row."""
+    df = df.copy()
+    df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
+    data = df.iloc[1:] if len(df) > 1 else df
+    empty = [col for col in df.columns if data[col].isna().all()]
+    df.drop(columns=empty, inplace=True)
+    return df
+
+
+def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows like 'TOTAL' or 'Phase X' that do not contain data."""
+    df = df.copy()
+    keywords = ("total", "phase")
+
+    def is_parasitic(row) -> bool:
+        """Return ``True`` if ``row`` looks like a summary row."""
+        cells = [
+            str(c).strip().lower()
+            for c in row
+            if not pd.isna(c) and str(c).strip() != ""
+        ]
+        if len(cells) == 1:
+            val = cells[0]
+            return any(val.startswith(k) for k in keywords)
+        return False
+
+    mask = df.apply(is_parasitic, axis=1)
+    df = df[~mask]
+    return df
+
+
+def _append_new_columns(path_ref: Path, columns: Iterable[str], chrono_name: str | None = None) -> None:
+    """Append unknown column names to ``path_ref`` CSV with empty mapping."""
+    if path_ref.exists():
+        df = pd.read_csv(path_ref, dtype=str)
     else:
-        config_dir = Path(config_dir)
-    mapping_dir = Path(__file__).resolve().parent / "mapping"
-    columns_ref = mapping_dir / "colonnes_ref.csv"
-    values_ref = mapping_dir / "valeurs_ref.csv"
-    schema_yaml = config_dir / "schema_definition.yaml"
-    column_map = data_cleaner.load_column_mapping(columns_ref)
-    value_map = data_cleaner.load_value_mapping(values_ref)
+        df = pd.DataFrame(columns=["raw_name", "mapped_name", "nom_chronogramme"])
 
-    if log_dir is not None:
-        os.environ["CHRONO_LOG_DIR"] = str(log_dir)
-    mapping_log = Path(os.getenv("CHRONO_LOG_DIR", config_dir)) / "mappings_log.xlsx"
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
 
-    plog = PipelineLogger(logger_name or "main_pipeline")
-
-    with plog.step("SELECT_FILE"):
-        inputs_dir = db_utils.BASE_DIR / "data" / "inputs"
-        if xlsx_path is None:
-            xlsx_file = _latest_xlsx(inputs_dir)
-        else:
-            xlsx_file = Path(xlsx_path)
-        if xlsx_file.suffix.lower() != ".xlsx" or not xlsx_file.exists():
-            raise FileNotFoundError(xlsx_file)
-
-    with plog.step("INSERT_METADATA") as m:
-        if metadata is None:
-            metadata = {
-                "nom_chronogramme": xlsx_file.stem,
-                "date_exercice": datetime.now().strftime("%Y-%m-%d"),
-                "lieu_exercice": "N/A",
-                "etablissement_nom": "Auto",
-                "etablissement_type": "N/A",
-                "submitter": "pipeline",
+    existing = set(df.get("raw_name", []).astype(str).map(_norm))
+    for col in columns:
+        norm = _norm(col)
+        if norm not in existing:
+            df.loc[len(df)] = {
+                "raw_name": col,
+                "mapped_name": "XXX",
+                "nom_chronogramme": chrono_name or "",
             }
-        meta_rec = dict(metadata)
-        meta_rec["nom_fichier_excel"] = xlsx_file.name
-        meta_rec.setdefault("nom_chronogramme", xlsx_file.stem)
-        meta_rec.setdefault("date_exercice", datetime.now().strftime("%Y-%m-%d"))
-        meta_rec.setdefault("lieu_exercice", "N/A")
-        meta_rec.setdefault("etablissement_nom", "Auto")
-        meta_rec.setdefault("etablissement_type", "N/A")
-        meta_rec.setdefault("submitter", "pipeline")
-        metadata = meta_rec
-        chrono_id = db_utils.insert_chronogram_metadata(meta_rec, db_path=db_path)
-        m["chrono_id"] = chrono_id
+            existing.add(norm)
 
-    try:
-        with plog.step("DETECT_SHEET"):
-            sheet_name = excel_parser.detect_main_sheet(xlsx_file)
+    df["norm"] = df["raw_name"].astype(str).map(_norm)
+    df.sort_values(by=["norm"], inplace=True)
+    df.drop_duplicates(subset=["norm"], keep="first", inplace=True)
+    df.drop(columns=["norm"], inplace=True)
+    df.to_csv(path_ref, index=False)
 
-        with plog.step("EXTRACT_RANGE") as m:
-            wb = openpyxl.load_workbook(xlsx_file, data_only=True)
-            sheet = wb[sheet_name]
-            header_row, first_col, last_col = mapping_utils.find_data_table(sheet)
-            df_raw = pd.read_excel(
-                xlsx_file,
-                sheet_name=sheet_name,
-                header=header_row - 1,
-                usecols=range(first_col - 1, last_col),
-            )
-            m["rows"] = len(df_raw)
 
-        with plog.step("CLEAN_DATA") as m:
-            df_clean = data_cleaner.clean_data(
-                df_raw,
-                chrono_rank=chrono_id,
-                column_map=column_map,
-                value_map=value_map,
-                columns_file=columns_ref,
-                values_file=values_ref,
-            )
-            m["rows"] = len(df_clean)
+def _append_new_values(
+    path_ref: Path, rows: Iterable[tuple[str, str]], chrono_name: str | None = None
+) -> None:
+    """Append unknown values to ``path_ref`` CSV with placeholder."""
+    if path_ref.exists():
+        df = pd.read_csv(path_ref, dtype=str)
+    else:
+        df = pd.DataFrame(columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"])
 
-        with plog.step("APPLY_SCHEMA"):
-            df_std = apply_schema_columns(df_clean, schema_yaml)
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
 
-        with plog.step("ENRICH_DATA") as m:
-            df_enriched = enrich_data(
-                df_std,
-                id_chronogramme=chrono_id,
-                etablissement_nom=metadata["etablissement_nom"],
-                etablissement_type=metadata["etablissement_type"],
-                nom_chronogramme=metadata["nom_chronogramme"],
-                date_exercice=metadata["date_exercice"],
-            )
-            m["rows"] = len(df_enriched)
+    existing = set(
+        zip(
+            df.get("column_name", []).astype(str).map(_norm),
+            df.get("raw_value", []).astype(str).map(_norm),
+        )
+    )
+    for col, val in rows:
+        key = (_norm(col), _norm(val))
+        if key not in existing:
+            df.loc[len(df)] = {
+                "column_name": col,
+                "raw_value": val,
+                "mapped_value": "XXX",
+                "nom_chronogramme": chrono_name or "",
+            }
+            existing.add(key)
 
-        with plog.step("INSERT_INJECTS") as m:
-            inserted = db_utils.insert_injects(df_enriched, db_path=db_path)
-            m["inserted"] = inserted
-            if inserted > 0:
-                db_utils.update_chronogram_stats(
-                    chrono_id, df_enriched, db_path=db_path
-                )
-            else:
-                db_utils.delete_chronogram(chrono_id, db_path=db_path)
-                plog.logger.warning(
-                    "Chronogramme %s rejet\u00e9: aucun inject", xlsx_file.name,
-                    extra={"event": "CHRONO_REJECT", "file": xlsx_file.name},
-                )
-                raise StopIteration("Aucun inject ins\u00e9r\u00e9")
+    df["norm_col"] = df["column_name"].astype(str).map(_norm)
+    df["norm_val"] = df["raw_value"].astype(str).map(_norm)
+    df.sort_values(by=["norm_col", "norm_val"], inplace=True)
+    df.drop_duplicates(subset=["norm_col", "norm_val"], keep="first", inplace=True)
+    df.drop(columns=["norm_col", "norm_val"], inplace=True)
+    df.to_csv(path_ref, index=False)
 
-    except Exception:
-        db_utils.delete_chronogram(chrono_id, db_path=db_path)
-        raise
 
-    plog.summary()
+def _apply_mappings(
+    df: pd.DataFrame,
+    column_map: Dict[str, str],
+    value_map: Dict[str, Dict[str, str]],
+    *,
+    columns_file: Path,
+    values_file: Path,
+    chrono_name: str | None = None,
+) -> pd.DataFrame:
+    """Rename columns and replace values using provided mappings."""
+    df = df.copy()
 
-    archived = db_utils.archive_file(xlsx_file, chrono_id=chrono_id)
+    unknown_cols = [c for c in df.columns if _norm(c) not in column_map]
+    if unknown_cols:
+        _append_new_columns(columns_file, unknown_cols, chrono_name)
+        raise StopIteration("Nouveau nom de colonne à mapper")
 
-    log_dir_actual = Path(os.getenv("CHRONO_LOG_DIR", config_dir))
-    logs = sorted(log_dir_actual.glob("run_*.log"))
-    if not logs:
-        default_dir = db_utils.BASE_DIR / "data" / "control"
-        logs = sorted(default_dir.glob("run_*.log"))
-    log_file = logs[-1] if logs else None
+    rename: Dict[str, str] = {}
+    drop_cols = []
+    for col in df.columns:
+        mapped = column_map.get(_norm(col))
+        if mapped == "__DROP__":
+            drop_cols.append(col)
+        else:
+            rename[col] = mapped
 
-    return {
-        "chrono_id": chrono_id,
-        "raw_df": df_raw,
-        "clean_df": df_clean,
-        "df": df_std,
-        "enriched_df": df_enriched,
-        "log_file": log_file,
-        "mapping_log": mapping_log,
-        "archived_file": archived,
+    df = df.rename(columns=rename)
+    if drop_cols:
+        df.drop(columns=drop_cols, inplace=True)
+
+    for col in list(df.columns):
+        mapping = value_map.get(_norm(col))
+        if not mapping:
+            continue
+        new_vals: list[str] = []
+
+        def convert(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            raw = str(val)
+            norm_val = _norm(raw)
+            if norm_val not in mapping:
+                new_vals.append(raw)
+                return pd.NA
+            mapped_val = mapping[norm_val]
+            return pd.NA if mapped_val == "" else mapped_val
+
+        df[col] = df[col].map(convert)
+
+        if new_vals:
+            _append_new_values(values_file, [(col, v) for v in new_vals], chrono_name)
+            raise StopIteration("Nouvelles valeurs à mapper")
+
+    return df
+
+
+def _validate_values(df: pd.DataFrame) -> None:
+    """Normalize and validate values for specific columns."""
+
+    allowed = {
+        "phase": {"1": "1", "2": "2", "3": "3", "4": "4"},
+        "statut": {"joue": "joué", "annule": "annulé", "a jouer": "à jouer"},
+        "type": {"structurant": "structurant", "saturant": "saturant"},
+        "nature": {
+            "mail": "mail",
+            "appel": "appel",
+            "sms": "SMS",
+            "video": "vidéo",
+            "weezer": "Weezer",
+            "oral": "oral",
+        },
     }
 
+    for col, mapping in allowed.items():
+        if col not in df.columns:
+            continue
 
-def main() -> None:
-    """CLI entry point for the pipeline."""
-    import argparse
-    import sys
+        def convert(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            key = normalize_text(val)
+            return mapping.get(key, pd.NA)
 
-    parser = argparse.ArgumentParser(description="Run chronogram pipeline")
-    parser.add_argument("file", nargs="?", help="Excel file to process")
-    parser.add_argument(
-        "--meta",
-        help="Metadata as JSON string or path to JSON file",
-    )
-    args = parser.parse_args()
-    metadata = None
-    if args.meta:
-        try:
-            meta_arg = Path(args.meta)
-            if meta_arg.is_file():
-                metadata = json.loads(meta_arg.read_text())
-            else:
-                metadata = json.loads(args.meta)
-        except Exception as exc:  # pragma: no cover - CLI handling
-            print(f"M\u00e9tadonn\u00e9es invalides: {exc}")
-            sys.exit(1)
-    logger = get_logger("main")
-    try:
-        result = run_pipeline(args.file, logger_name="main", metadata=metadata)
-    except StopIteration as exc:  # pragma: no cover - CLI handling
-        logger.warning("Pipeline stopped: %s", exc)
-        print("Compl\u00e9ter les feuilles 'nouvelles' dans mapping/ puis relancer.")
-        sys.exit(2)
-    except Exception as exc:  # pragma: no cover - CLI handling
-        logger.exception("Pipeline failed")
-        print(f"\u00c9CHEC : {exc}")
-        sys.exit(1)
-    else:
-        print(f"SUCC\u00c8S : {result['chrono_id']}")
-        sys.exit(0)
+        df[col] = df[col].map(convert)
+
+    if "horodatage" in df.columns:
+        def parse_ts(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            ts = pd.to_datetime(str(val), dayfirst=True, errors="coerce")
+            if pd.isna(ts):
+                return pd.NA
+            return ts.strftime("%Y-%m-%dT%H:%M:%S")
+
+        df["horodatage"] = df["horodatage"].map(parse_ts)
 
 
-if __name__ == "__main__":
-    main()
+def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Remove rows where the same value appears in >=6 columns."""
+
+    def is_repeat(row: pd.Series) -> bool:
+        values = [
+            str(row[c]).strip()
+            for c in cols
+            if c in row.index and pd.notna(row[c]) and str(row[c]).strip() != ""
+        ]
+        if not values:
+            return False
+        counts: Dict[str, int] = {}
+        for v in values:
+            counts[v] = counts.get(v, 0) + 1
+        return max(counts.values()) >= 6
+
+    mask = df.apply(is_repeat, axis=1)
+    cleaned = df.loc[~mask].reset_index(drop=True)
+    if cleaned.empty and not df.empty:
+        return df.reset_index(drop=True)
+    return cleaned
+
+
+def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
+    """Standardize columns and add identifier columns."""
+
+    mapping = {
+        "phase": "phase",
+        "statut inject": "statut",
+        "statut": "statut",
+        "type": "type",
+        "horodatage": "horodatage",
+        "emetteur": "emetteur",
+        "emmeteur": "emetteur",
+        "destinataire": "recepteur",
+        "recepteur": "recepteur",
+        "nature": "nature",
+        "descriptif": "resume",
+        "description": "resume",
+        "resume": "resume",
+        "corps": "contenu",
+        "contenu": "contenu",
+        "actions attendues": "actions_attendues",
+        "reactions attendues": "actions_attendues",
+        "commentaires": "commentaires",
+        "observations": "commentaires",
+    }
+
+    std_cols = [
+        "phase",
+        "statut",
+        "type",
+        "horodatage",
+        "emetteur",
+        "recepteur",
+        "nature",
+        "resume",
+        "contenu",
+        "actions_attendues",
+        "commentaires",
+    ]
+
+    rename: Dict[str, str] = {}
+    for col in list(df.columns):
+        norm = normalize_text(col)
+        if norm in mapping:
+            rename[col] = mapping[norm]
+
+    data = df.rename(columns=rename)
+    for col in std_cols:
+        if col not in data.columns:
+            data[col] = pd.NA
+
+    data = _drop_repeated_rows(data, std_cols)
+    _validate_values(data)
+
+    chrono_id = f"C{chrono_rank:03d}"
+    numeros = [f"L{i:03d}" for i in range(1, len(data) + 1)]
+    data.insert(0, "id_chronogramme", chrono_id)
+    data.insert(1, "numero", numeros)
+    data.insert(2, "id_inject", [f"{chrono_id}_{n}" for n in numeros])
+    data.replace({pd.NA: None}, inplace=True)
+
+    return data
+
+
+def clean_data(
+    df: pd.DataFrame,
+    *,
+    chrono_rank: int = 1,
+    column_map: Dict[str, str] | None = None,
+    value_map: Dict[str, Dict[str, str]] | None = None,
+    columns_file: Path | None = None,
+    values_file: Path | None = None,
+    chrono_name: str | None = None,
+) -> pd.DataFrame:
+    """Return ``df`` cleaned, optionally using manual mappings."""
+    df = unmerge_cells(df)
+    df = drop_empty_rows(df)
+    df = drop_empty_cols(df)
+    df = remove_parasitic_rows(df)
+    df.reset_index(drop=True, inplace=True)
+
+    if column_map is not None and columns_file is not None and values_file is not None:
+        df = _apply_mappings(
+            df,
+            column_map,
+            value_map or {},
+            columns_file=columns_file,
+            values_file=values_file,
+            chrono_name=chrono_name,
+        )
+
+    df = standardize_and_clean(df, chrono_rank=chrono_rank)
+    return df

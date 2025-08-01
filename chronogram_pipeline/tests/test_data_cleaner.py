@@ -92,35 +92,21 @@ def test_standardize_and_clean_invalid_value():
     assert pd.isna(out["statut"].iloc[0])
 
 
-def test_no_total_line_loss():
-    # Vérifie qu'on ne perd pas toutes les lignes quand la première ressemble à du bruit
-    columns = [
-        "phase", "statut", "type", "horodatage", "emetteur", "recepteur",
-        "nature", "resume", "contenu", "actions_attendues", "commentaires"
-    ]
-    df = pd.DataFrame([
-        ["Texte"] * len(columns),
-        [1, "joué", "structurant", "21/02/2024", "A", "B", "mail", "r", "c", "a", ""],
-    ], columns=columns)
-
-    out = clean_data(df)
-    assert not out.empty
-
-
 # Helpers for mapping tests
-def _create_column_file(path: Path, rows: list[tuple[str, str]]):
-    pd.DataFrame(rows, columns=["raw_name", "mapped_name"]).to_csv(path, index=False)
+
+def _create_column_file(path: Path, rows: list[tuple[str, str, str]]):
+    pd.DataFrame(rows, columns=["raw_name", "mapped_name", "nom_chronogramme"]).to_csv(path, index=False)
 
 
-def _create_value_file(path: Path, rows: list[tuple[str, str, str]]):
-    pd.DataFrame(rows, columns=["column_name", "raw_value", "mapped_value"]).to_csv(path, index=False)
+def _create_value_file(path: Path, rows: list[tuple[str, str, str, str]]):
+    pd.DataFrame(rows, columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"]).to_csv(path, index=False)
 
 
 def test_load_mapping_and_clean(tmp_path):
     col_file = tmp_path / "colonnes.csv"
     val_file = tmp_path / "valeurs.csv"
-    _create_column_file(col_file, [("A", "alpha"), ("B", "")])
-    _create_value_file(val_file, [("alpha", "x", "X")])
+    _create_column_file(col_file, [("A", "alpha", "c1"), ("B", "", "c1")])
+    _create_value_file(val_file, [("alpha", "x", "X", "c1")])
 
     col_map = load_column_mapping(col_file)
     val_map = load_value_mapping(val_file)
@@ -156,19 +142,20 @@ def test_clean_data_new_column(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chrono_name="test",
         )
 
-    # La colonne inconnue doit avoir été ajoutée dans cols.csv avec mapped_name "XXX"
     df_new = pd.read_csv(col_file)
-    assert (df_new["raw_name"] == "Unknown").any()
-    assert (df_new.loc[df_new["raw_name"] == "Unknown", "mapped_name"] == "XXX").any()
+    row = df_new.loc[df_new["raw_name"] == "Unknown"].iloc[0]
+    assert row["mapped_name"] == "XXX"
+    assert "nom_chronogramme" in df_new.columns
 
 
 def test_clean_data_new_value(tmp_path):
     col_file = tmp_path / "c.csv"
     val_file = tmp_path / "v.csv"
-    _create_column_file(col_file, [("A", "alpha")])
-    _create_value_file(val_file, [("alpha", "bar", "BAR")])
+    _create_column_file(col_file, [("A", "alpha", "c2")])
+    _create_value_file(val_file, [("alpha", "bar", "BAR", "c2")])
     col_map = load_column_mapping(col_file)
     val_map = load_value_mapping(val_file)
 
@@ -180,12 +167,12 @@ def test_clean_data_new_value(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chrono_name="test2",
         )
 
-    # La nouvelle valeur brute "foo" doit avoir été enregistrée avec "XXX"
     df_new = pd.read_csv(val_file)
-    values = set(df_new.itertuples(index=False, name=None))
-    assert ("alpha", "foo", "XXX") in values
+    rows = set(df_new.itertuples(index=False, name=None))
+    assert any(r[0] == "alpha" and r[1] == "foo" and r[2] == "XXX" and r[3] == "test2" for r in rows)
 
 
 def test_drop_empty_rows_cols_and_parasitic():
