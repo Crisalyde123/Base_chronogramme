@@ -1,3 +1,4 @@
 __pycache__/
 *.db
 chronogram_pipeline/data/control/*.log
+chronogram_pipeline/data/archive/raw_excels/*.xlsx

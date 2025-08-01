@@ -179,6 +179,8 @@ def run_pipeline(
 
     plog.summary()
 
+    archived = db_utils.archive_file(xlsx_file, chrono_id=chrono_id)
+
     log_dir_actual = Path(os.getenv("CHRONO_LOG_DIR", config_dir))
     logs = sorted(log_dir_actual.glob("run_*.log"))
     if not logs:
@@ -194,6 +196,7 @@ def run_pipeline(
         "enriched_df": df_enriched,
         "log_file": log_file,
         "mapping_log": mapping_log,
+        "archived_file": archived,
     }
 
 

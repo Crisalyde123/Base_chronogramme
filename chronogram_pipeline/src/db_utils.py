@@ -5,6 +5,7 @@ from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Dict, Any
 import pandas as pd
+import shutil
 
 logger = get_logger(__name__)
 
@@ -223,4 +224,45 @@ def update_chronogram_stats(id_chronogramme: int, df, db_path: Path | None = Non
         )
         conn.commit()
     logger.debug("Updated chronogram %s with %s injects", id_chronogramme, nb_injects)
+
+
+def archive_file(
+    file_path: Path,
+    *,
+    chrono_id: int | None = None,
+    archive_dir: Path | None = None,
+) -> Path:
+    """Move ``file_path`` to the archive directory with a timestamped name.
+
+    Parameters
+    ----------
+    file_path : Path
+        Excel file that has been successfully processed.
+    chrono_id : int, optional
+        Chronogram identifier used to build the archive filename.
+    archive_dir : Path, optional
+        Destination directory. Defaults to ``data/archive/raw_excels`` in the
+        project tree.
+
+    Returns
+    -------
+    Path
+        Location of the archived file.
+    """
+
+    if archive_dir is None:
+        archive_dir = BASE_DIR / "data" / "archive" / "raw_excels"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = file_path.suffix
+    base = file_path.stem
+    if chrono_id is not None:
+        new_name = f"{base}_{chrono_id}_{timestamp}{suffix}"
+    else:
+        new_name = f"{base}_{timestamp}{suffix}"
+    dest = archive_dir / new_name
+    shutil.move(str(file_path), dest)
+    logger.info("Archived %s to %s", file_path, dest)
+    return dest
 
