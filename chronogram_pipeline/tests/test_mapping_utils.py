@@ -6,7 +6,11 @@ import pandas as pd
 # allow imports from project root
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.mapping_utils import enrich_mapping_values, update_mapping_headers
+from src.mapping_utils import (
+    enrich_mapping_values,
+    update_mapping_headers,
+    find_data_table,
+)
 
 def test_enrich_mapping_values(tmp_path):
     # Prepare temporary mapping files
@@ -81,3 +85,13 @@ def test_update_mapping_headers(tmp_path):
     assert expected_headers.issubset(headers)
     assert new_added == len(expected_headers) - 1
     assert total >= len(expected_headers)
+
+def test_find_data_table_detects_proper_header():
+    source_file = Path(__file__).resolve().parents[1] / "data" / "inputs" / "chrono test nombreuses colonnes.xlsx"
+    import openpyxl
+    wb = openpyxl.load_workbook(source_file, data_only=True)
+    ws = wb["Chrono GHT"]
+    header_row, first_col, last_col = find_data_table(ws)
+    assert header_row == 3
+    assert first_col == 1
+    assert last_col >= 10

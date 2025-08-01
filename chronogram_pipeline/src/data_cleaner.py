@@ -1,18 +1,24 @@
-"""Data cleaning utilities for chronogram tables."""
-
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List
-import csv
+from typing import Dict, Iterable
 
+import csv
 import pandas as pd
 
 from .mapping_utils import normalize_text
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
-def _log_history(path: Path, rows: List[Dict[str, str]]) -> None:
+def _norm(value: str) -> str:
+    """Return normalized key: lowercase, accentless without spaces."""
+    return normalize_text(value).replace(" ", "")
+
+
+def _log_history(path: Path, rows: list[Dict[str, str]]) -> None:
     """Append mapping history rows to ``path``."""
     if not rows:
         return
@@ -30,49 +36,37 @@ def _log_history(path: Path, rows: List[Dict[str, str]]) -> None:
 def load_column_mapping(path_ref: Path, history_file: Path | None = None) -> Dict[str, str]:
     """Return column name mapping from CSV file at ``path_ref`` and purge applied lines."""
     if not path_ref.exists():
-        pd.DataFrame(columns=["chronogramme", "raw_name", "mapped_name"]).to_csv(
-            path_ref, index=False, quoting=csv.QUOTE_MINIMAL
-        )
+        pd.DataFrame(
+            columns=["raw_name", "mapped_name", "nom_chronogramme"]
+        ).to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+        logger.info("Created column mapping file %s", path_ref)
         return {}
 
     df = pd.read_csv(path_ref, dtype=str)
-    df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
 
+    # Normalize raw names and ensure unique entries
+    df["norm"] = df["raw_name"].astype(str).map(_norm)
+    df.sort_values(by=["norm"], inplace=True)
+    df.drop_duplicates(subset=["norm"], keep="first", inplace=True)
+    df.drop(columns=["norm"], inplace=True)
+
+    # Persist cleaned mapping back to CSV
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+
+    # Build mapping dict: norm(raw_name) -> mapped_name or "__DROP__" semantics if needed downstream
     mapping: Dict[str, str] = {}
-    keep_rows = []
-    history: List[Dict[str, str]] = []
     for _, row in df.iterrows():
-        raw = row.get("raw_name")
-        mapped = row.get("mapped_name")
-        chrono = row.get("chronogramme", "")
-        if pd.isna(raw):
+        raw = str(row.get("raw_name", ""))
+        mapped = "" if pd.isna(row.get("mapped_name")) else str(row.get("mapped_name"))
+        if mapped == "XXX":
+            # placeholder: skip until manually filled
             continue
-        raw = str(raw)
-        mapped_val = "" if pd.isna(mapped) else str(mapped)
-        if mapped_val == "X":
-            keep_rows.append(row)
-            continue
-        if mapped_val in ("", "__DROP__"):
-            mapping[raw] = "__DROP__"
-        else:
-            mapping[raw] = mapped_val
-        history.append(
-            {
-                "timestamp": datetime.now().isoformat(),
-                "chronogramme": chrono,
-                "category": "column",
-                "column": raw,
-                "raw": raw,
-                "mapped": mapping[raw],
-            }
-        )
+        key = _norm(raw)
+        mapping[key] = "__DROP__" if mapped == "" else mapped
 
-    pd.DataFrame(keep_rows, columns=df.columns).to_csv(
-        path_ref, index=False, quoting=csv.QUOTE_MINIMAL
-    )
-    if history_file is not None:
-        _log_history(history_file, history)
-
+    logger.debug("Loaded %d column mappings from %s", len(mapping), path_ref)
     return mapping
 
 
@@ -80,51 +74,35 @@ def load_value_mapping(path_ref: Path, history_file: Path | None = None) -> Dict
     """Return per-column value mapping from CSV and purge applied lines."""
     if not path_ref.exists():
         pd.DataFrame(
-            columns=["chronogramme", "column_name", "raw_value", "mapped_value"]
+            columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"]
         ).to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+        logger.info("Created value mapping file %s", path_ref)
         return {}
 
     df = pd.read_csv(path_ref, dtype=str)
-    df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
+
+    # Normalize and dedupe per column/value pair
+    df["norm_col"] = df["column_name"].astype(str).map(_norm)
+    df["norm_val"] = df["raw_value"].astype(str).map(_norm)
+    df.sort_values(by=["norm_col", "norm_val"], inplace=True)
+    df.drop_duplicates(subset=["norm_col", "norm_val"], keep="first", inplace=True)
+    df.drop(columns=["norm_col", "norm_val"], inplace=True)
+
+    # Write back cleaned reference
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
     mapping: Dict[str, Dict[str, str]] = {}
-    keep_rows = []
-    history: List[Dict[str, str]] = []
     for _, row in df.iterrows():
-        col = row.get("column_name")
-        raw = row.get("raw_value")
-        mapped = row.get("mapped_value")
-        chrono = row.get("chronogramme", "")
-        if pd.isna(col) or pd.isna(raw):
+        col = str(row.get("column_name", ""))
+        raw = str(row.get("raw_value", ""))
+        mapped = "" if pd.isna(row.get("mapped_value")) else str(row.get("mapped_value"))
+        if mapped == "XXX":
             continue
-        col = str(col)
-        raw = str(raw)
-        mapped_val = "" if pd.isna(mapped) else str(mapped)
-        if mapped_val == "X":
-            keep_rows.append(row)
-            continue
-        if mapped_val == "__EMPTY__" or mapped_val == "":
-            final_val = ""
-        else:
-            final_val = mapped_val
-        mapping.setdefault(col, {})[raw] = final_val
-        history.append(
-            {
-                "timestamp": datetime.now().isoformat(),
-                "chronogramme": chrono,
-                "category": "value",
-                "column": col,
-                "raw": raw,
-                "mapped": final_val,
-            }
-        )
+        mapping.setdefault(_norm(col), {})[_norm(raw)] = mapped
 
-    pd.DataFrame(keep_rows, columns=df.columns).to_csv(
-        path_ref, index=False, quoting=csv.QUOTE_MINIMAL
-    )
-    if history_file is not None:
-        _log_history(history_file, history)
-
+    logger.debug("Loaded value mapping for %d columns from %s", len(mapping), path_ref)
     return mapping
 
 
@@ -135,9 +113,6 @@ def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
     # Forward-fill downwards first to handle vertical merges
     result = result.ffill()
 
-    # ``result`` might be a Series if ``df`` was not a DataFrame.  ``Series``
-    # does not support ``ffill`` with ``axis`` so convert it to a single-row
-    # DataFrame before applying the horizontal fill.
     if isinstance(result, pd.Series):
         result = result.to_frame().T
 
@@ -170,7 +145,6 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     keywords = ("total", "phase")
 
     def is_parasitic(row) -> bool:
-        """Return ``True`` if ``row`` looks like a summary row."""
         cells = [
             str(c).strip().lower()
             for c in row
@@ -186,47 +160,75 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _append_new_columns(path_ref: Path, chronogramme: str, columns: Iterable[str]) -> None:
-    """Append unknown column names to ``path_ref`` CSV with placeholder."""
+def _append_new_columns(path_ref: Path, columns: Iterable[str], chrono_name: str | None = None) -> None:
+    """Append unknown column names to ``path_ref`` CSV with empty mapping."""
     if path_ref.exists():
         df = pd.read_csv(path_ref, dtype=str)
     else:
-        df = pd.DataFrame(columns=["chronogramme", "raw_name", "mapped_name"])
+        df = pd.DataFrame(columns=["raw_name", "mapped_name", "nom_chronogramme"])
 
-    existing = set(df.get("raw_name", []))
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
+
+    existing = set(df.get("raw_name", []).astype(str).map(_norm))
     for col in columns:
-        if col not in existing:
+        norm = _norm(col)
+        if norm not in existing:
             df.loc[len(df)] = {
-                "chronogramme": chronogramme,
                 "raw_name": col,
-                "mapped_name": "X",
+                "mapped_name": "XXX",
+                "nom_chronogramme": chrono_name or "",
             }
-            existing.add(col)
+            existing.add(norm)
 
-    df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
+    # Clean ordering and persist
+    df["norm"] = df["raw_name"].astype(str).map(_norm)
+    df.sort_values(by=["norm"], inplace=True)
+    df.drop_duplicates(subset=["norm"], keep="first", inplace=True)
+    df.drop(columns=["norm"], inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+    logger.info("Appended new columns to %s: %s", path_ref, columns)
 
 
-def _append_new_values(path_ref: Path, chronogramme: str, rows: Iterable[tuple[str, str]]) -> None:
+def _append_new_values(
+    path_ref: Path,
+    rows: Iterable[tuple[str, str]],
+    chrono_name: str | None = None,
+) -> None:
     """Append unknown values to ``path_ref`` CSV with placeholder."""
     if path_ref.exists():
         df = pd.read_csv(path_ref, dtype=str)
     else:
-        df = pd.DataFrame(
-            columns=["chronogramme", "column_name", "raw_value", "mapped_value"]
-        )
+        df = pd.DataFrame(columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"])
 
-    existing = set(zip(df.get("column_name", []), df.get("raw_value", [])))
+    if "nom_chronogramme" not in df.columns:
+        df["nom_chronogramme"] = ""
+
+    existing = set(
+        zip(
+            df.get("column_name", []).astype(str).map(_norm),
+            df.get("raw_value", []).astype(str).map(_norm),
+        )
+    )
     for col, val in rows:
-        if (col, val) not in existing:
+        key = (_norm(col), _norm(val))
+        if key not in existing:
             df.loc[len(df)] = {
-                "chronogramme": chronogramme,
                 "column_name": col,
                 "raw_value": val,
-                "mapped_value": "X",
+                "mapped_value": "XXX",
+                "nom_chronogramme": chrono_name or "",
             }
-    df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
+            existing.add(key)
+
+    # Clean ordering and persist
+    df["norm_col"] = df["column_name"].astype(str).map(_norm)
+    df["norm_val"] = df["raw_value"].astype(str).map(_norm)
+    df.sort_values(by=["norm_col", "norm_val"], inplace=True)
+    df.drop_duplicates(subset=["norm_col", "norm_val"], keep="first", inplace=True)
+    df.drop(columns=["norm_col", "norm_val"], inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
+    logger.info("Appended new values to %s: %s entries", path_ref, len(rows))
 
 
 def _apply_mappings(
@@ -236,105 +238,66 @@ def _apply_mappings(
     *,
     columns_file: Path,
     values_file: Path,
-    chronogramme: str,
-    history_file: Path | None = None,
+    chrono_name: str | None = None,
 ) -> pd.DataFrame:
     """Rename columns and replace values using provided mappings."""
     df = df.copy()
+    logger.debug("Applying mappings to dataframe with columns: %s", list(df.columns))
 
-    unknown_cols = [c for c in df.columns if c not in column_map]
+    # Verify and append new columns if needed
+    unknown_cols = [c for c in df.columns if _norm(c) not in column_map]
     if unknown_cols:
-        _append_new_columns(columns_file, chronogramme, unknown_cols)
+        _append_new_columns(columns_file, unknown_cols, chrono_name)
+        logger.warning("Unknown columns encountered, appended for manual mapping: %s", unknown_cols)
         raise StopIteration("Nouveau nom de colonne à mapper")
 
+    # Determine rename and drop actions
     rename: Dict[str, str] = {}
-    drop_cols = []
+    drop_cols: list[str] = []
     for col in df.columns:
-        mapped = column_map.get(col)
+        mapped = column_map.get(_norm(col))
         if mapped == "__DROP__":
             drop_cols.append(col)
-            if history_file is not None:
-                _log_history(
-                    history_file,
-                    [
-                        {
-                            "timestamp": datetime.now().isoformat(),
-                            "chronogramme": chronogramme,
-                            "category": "column",
-                            "column": col,
-                            "raw": col,
-                            "mapped": "__DROP__",
-                        }
-                    ],
-                )
+            # history logging could be added here if needed
         else:
             rename[col] = mapped
-            if history_file is not None and col != mapped:
-                _log_history(
-                    history_file,
-                    [
-                        {
-                            "timestamp": datetime.now().isoformat(),
-                            "chronogramme": chronogramme,
-                            "category": "column",
-                            "column": col,
-                            "raw": col,
-                            "mapped": mapped,
-                        }
-                    ],
-                )
 
+    # Apply column renaming and dropping
     df = df.rename(columns=rename)
     if drop_cols:
         df.drop(columns=drop_cols, inplace=True)
 
+    # Replace values per column mapping
     for col in list(df.columns):
-        mapping = value_map.get(col)
+        mapping = value_map.get(_norm(col))
         if not mapping:
             continue
-        new_vals: List[str] = []
-        used_pairs: List[tuple[str, str]] = []
+
+        new_vals: list[str] = []
 
         def convert(val: object) -> object:
             if pd.isna(val) or str(val).strip() == "":
                 return pd.NA
             raw = str(val)
-            if raw not in mapping:
-                if raw not in new_vals:
-                    new_vals.append(raw)
+            norm_raw = _norm(raw)
+            if norm_raw not in mapping:
+                new_vals.append(raw)
                 return pd.NA
-            mapped_val = mapping[raw]
-            used_pairs.append((raw, mapped_val))
-            return "" if mapped_val == "" else mapped_val
+            mapped_val = mapping[norm_raw]
+            return pd.NA if mapped_val == "" else mapped_val
 
         df[col] = df[col].map(convert)
 
         if new_vals:
-            _append_new_values(values_file, chronogramme, [(col, v) for v in new_vals])
+            _append_new_values(values_file, [(col, v) for v in new_vals], chrono_name)
+            logger.warning("Unknown values for column '%s' appended for manual mapping: %s", col, new_vals)
             raise StopIteration("Nouvelles valeurs à mapper")
-
-        if history_file is not None and used_pairs:
-            _log_history(
-                history_file,
-                [
-                    {
-                        "timestamp": datetime.now().isoformat(),
-                        "chronogramme": chronogramme,
-                        "category": "value",
-                        "column": col,
-                        "raw": r,
-                        "mapped": m,
-                    }
-                    for r, m in used_pairs
-                ],
-            )
 
     return df
 
 
 def _validate_values(df: pd.DataFrame) -> None:
     """Normalize and validate values for specific columns."""
-
     allowed = {
         "phase": {"1": "1", "2": "2", "3": "3", "4": "4"},
         "statut": {"joue": "joué", "annule": "annulé", "a jouer": "à jouer"},
@@ -375,7 +338,6 @@ def _validate_values(df: pd.DataFrame) -> None:
 
 def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """Remove rows where the same value appears in >=6 columns."""
-
     def is_repeat(row: pd.Series) -> bool:
         values = [
             str(row[c]).strip()
@@ -398,7 +360,6 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
     """Standardize columns and add identifier columns."""
-
     mapping = {
         "phase": "phase",
         "statut inject": "statut",
@@ -467,7 +428,7 @@ def clean_data(
     value_map: Dict[str, Dict[str, str]] | None = None,
     columns_file: Path | None = None,
     values_file: Path | None = None,
-    chronogramme: str | None = None,
+    chrono_name: str | None = None,
     history_file: Path | None = None,
 ) -> pd.DataFrame:
     """Return ``df`` cleaned, optionally using manual mappings."""
@@ -481,7 +442,6 @@ def clean_data(
         column_map is not None
         and columns_file is not None
         and values_file is not None
-        and chronogramme is not None
     ):
         df = _apply_mappings(
             df,
@@ -489,8 +449,7 @@ def clean_data(
             value_map or {},
             columns_file=columns_file,
             values_file=values_file,
-            chronogramme=chronogramme,
-            history_file=history_file,
+            chrono_name=chrono_name,
         )
 
     df = standardize_and_clean(df, chrono_rank=chrono_rank)

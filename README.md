@@ -34,14 +34,20 @@ le service utilisé.
 
 ## Mapping manuel
 
-- Le dossier `mapping/` contient les références utilisées par le pipeline :
 
-- `colonnes.csv` : colonnes `chronogramme`, `raw_name` et `mapped_name`.
-  Les nouvelles colonnes rencontrées sont ajoutées avec `mapped_name` mis à `X`.
-- `valeurs.csv` : colonnes `chronogramme`, `column_name`, `raw_value` et
-  `mapped_value`. Les valeurs inconnues sont ajoutées avec `mapped_value` à `X`.
-- `colonnes_standardisees.csv` : liste des noms de colonnes cibles possibles.
-- `valeurs_standardisees.csv` : valeurs autorisées pour certaines colonnes.
+- Le dossier `mapping/` contient les références utilisées par le pipeline :
+  - `colonnes_ref.csv` : colonnes `raw_name`, `mapped_name` et `nom_chronogramme`.
+    Les nouvelles colonnes détectées sont ajoutées avec `mapped_name` à `XXX` et
+    le nom du chronogramme d'origine.
+  - `valeurs_ref.csv` : colonnes `column_name`, `raw_value`, `mapped_value` et
+    `nom_chronogramme`. Les nouvelles valeurs sont ajoutées avec
+    `mapped_value` à `XXX`.
+  - `colonnes_standardisees.csv` : liste des noms de colonnes cibles possibles.
+  - `valeurs_standardisees.csv` : valeurs autorisées pour certaines colonnes.
+
+Les ajouts automatiques appliquent une normalisation (minuscules sans espaces) et
+la suppression des doublons pour faciliter la complétion manuelle.
+
 
 Après avoir complété `colonnes.csv` ou `valeurs.csv`, relancez le pipeline pour
 reprendre le traitement.
