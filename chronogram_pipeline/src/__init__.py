@@ -25,6 +25,7 @@ from .data_cleaner import (
 )
 from .pipeline_logger import PipelineLogger
 from .enricher import enrich_data
+from .schema_utils import apply_schema_columns, load_schema_fields
 
 __all__ = [
     "create_connection",
@@ -46,4 +47,6 @@ __all__ = [
     "insert_chronogram_metadata",
     "archive_file",
     "enrich_data",
+    "apply_schema_columns",
+    "load_schema_fields",
 ]

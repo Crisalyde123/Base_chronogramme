@@ -13,13 +13,17 @@ def create_config(dir: Path) -> Path:
     config = dir / "cfg"
     config.mkdir()
     (config / "mapping_headers.csv").write_text(
-        "En-tete original,En-tete standard\nHorodatage,horodatage\nDescriptif,description\nType d'inject,type_inject\n"
+        "En-tete original,En-tete standard\nHorodatage,horodatage\nDescriptif,description\nType d'inject,type\n"
     )
     (config / "mapping_values.csv").write_text(
-        "Colonne,Valeur brute,Valeur standard\ntype_inject,Majeur,Critique\n"
+        "Colonne,Valeur brute,Valeur standard\ntype,Majeur,structurant\n"
     )
     (config / "schema_definition.yaml").write_text(
-        "fields:\n  - name: type_inject\n    values: ['Critique', 'Important']\n"
+        "fields:\n"
+        "  - name: horodatage\n"
+        "  - name: description\n"
+        "  - name: type\n"
+        "    values: ['structurant', 'saturant']\n"
     )
     return config
 
@@ -46,7 +50,7 @@ def test_main_standardizes_headers(tmp_path):
     excel = tmp_path / "sample.xlsx"
     create_excel(excel)
     res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert list(res["df"].columns) == ["horodatage", "description", "type_inject"]
+    assert list(res["df"].columns) == ["horodatage", "description", "type"]
 
 
 def test_main_standardizes_values(tmp_path):
@@ -54,7 +58,7 @@ def test_main_standardizes_values(tmp_path):
     excel = tmp_path / "sample.xlsx"
     create_excel(excel)
     res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert list(res["df"]["type_inject"]) == ["Critique"]
+    assert list(res["df"]["type"]) == ["structurant"]
 
 
 def test_main_logs_are_created(tmp_path):

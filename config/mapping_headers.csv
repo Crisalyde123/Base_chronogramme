@@ -1,4 +1,13 @@
 En-tete original,En-tete standard
-Descriptif,Contenu
-Destinataires potentiels,Destinataire
-Criteres d'acceptation (Definition of Done),Criteres d'acceptation
+Phase exercice,phase
+Phase_exercice,phase
+Statut,statut
+Type d'inject,type
+Horodatage,horodatage
+Emetteur,emetteur
+Destinataire,recepteur
+Modalite,nature
+Resume,resume
+Descriptif,contenu
+Actions,actions_attendues
+Commentaires,commentaires
