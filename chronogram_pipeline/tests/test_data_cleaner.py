@@ -5,7 +5,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.data_cleaner import clean_data, unmerge_cells, standardize_and_clean
+from src.data_cleaner import (
+    clean_data,
+    unmerge_cells,
+    standardize_and_clean,
+    load_column_mapping,
+    load_value_mapping,
+)
 
 
 def test_clean_data_removes_noise():
@@ -85,4 +91,81 @@ def test_standardize_and_clean_invalid_value():
     df = pd.DataFrame({"statut": ["invalid"]})
     out = standardize_and_clean(df)
     assert pd.isna(out["statut"].iloc[0])
+
+
+def _create_column_file(path: Path, rows: list[tuple[str, str, str]]):
+    pd.DataFrame(rows, columns=["raw_name", "mapped_name", "nom_chronogramme"]).to_csv(path, index=False)
+
+
+def _create_value_file(path: Path, rows: list[tuple[str, str, str, str]]):
+    pd.DataFrame(rows, columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"]).to_csv(path, index=False)
+
+
+def test_load_mapping_and_clean(tmp_path):
+    col_file = tmp_path / "colonnes.csv"
+    val_file = tmp_path / "valeurs.csv"
+    _create_column_file(col_file, [("A", "alpha", "c1"), ("B", "", "c1")])
+    _create_value_file(val_file, [("alpha", "x", "X", "c1")])
+
+    col_map = load_column_mapping(col_file)
+    val_map = load_value_mapping(val_file)
+
+    df = pd.DataFrame({"A": ["x"], "B": ["y"]})
+    out = clean_data(
+        df,
+        chrono_rank=1,
+        column_map=col_map,
+        value_map=val_map,
+        columns_file=col_file,
+        values_file=val_file,
+    )
+
+    assert "alpha" in out.columns
+    assert "B" not in out.columns
+    assert out["alpha"].iloc[0] == "X"
+
+
+def test_clean_data_new_column(tmp_path):
+    col_file = tmp_path / "cols.csv"
+    val_file = tmp_path / "vals.csv"
+    _create_column_file(col_file, [])
+    _create_value_file(val_file, [])
+    col_map = load_column_mapping(col_file)
+    val_map = load_value_mapping(val_file)
+
+    df = pd.DataFrame({"Unknown": [1]})
+    with pytest.raises(StopIteration):
+        clean_data(
+            df,
+            column_map=col_map,
+            value_map=val_map,
+            columns_file=col_file,
+            values_file=val_file,
+        )
+    df_new = pd.read_csv(col_file)
+    row = df_new.loc[df_new["raw_name"] == "Unknown"].iloc[0]
+    assert row["mapped_name"] == "XXX"
+    assert "nom_chronogramme" in df_new.columns
+
+
+def test_clean_data_new_value(tmp_path):
+    col_file = tmp_path / "c.csv"
+    val_file = tmp_path / "v.csv"
+    _create_column_file(col_file, [("A", "alpha", "c2")])
+    _create_value_file(val_file, [("alpha", "bar", "BAR", "c2")])
+    col_map = load_column_mapping(col_file)
+    val_map = load_value_mapping(val_file)
+
+    df = pd.DataFrame({"A": ["foo"]})
+    with pytest.raises(StopIteration):
+        clean_data(
+            df,
+            column_map=col_map,
+            value_map=val_map,
+            columns_file=col_file,
+            values_file=val_file,
+        )
+    df_new = pd.read_csv(val_file)
+    rows = set(df_new.itertuples(index=False, name=None))
+    assert any(r[0] == "alpha" and r[1] == "foo" and r[2] == "XXX" for r in rows)
 

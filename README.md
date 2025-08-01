@@ -32,6 +32,24 @@ Pour les opérations de standardisation pilotées par l'IA, renseignez les clefs
 dans les variables d'environnement `OPENAI_API_KEY` ou `MISTRAL_API_KEY` selon
 le service utilisé.
 
+## Mapping manuel
+
+- Le dossier `mapping/` contient les références utilisées par le pipeline :
+  - `colonnes_ref.csv` : colonnes `raw_name`, `mapped_name` et `nom_chronogramme`.
+    Les nouvelles colonnes détectées sont ajoutées avec `mapped_name` à `XXX` et
+    le nom du chronogramme d'origine.
+  - `valeurs_ref.csv` : colonnes `column_name`, `raw_value`, `mapped_value` et
+    `nom_chronogramme`. Les nouvelles valeurs sont ajoutées avec
+    `mapped_value` à `XXX`.
+  - `colonnes_standardisees.csv` : liste des noms de colonnes cibles possibles.
+  - `valeurs_standardisees.csv` : valeurs autorisées pour certaines colonnes.
+
+Les ajouts automatiques appliquent une normalisation (minuscules sans espaces) et
+la suppression des doublons pour faciliter la complétion manuelle.
+
+Après mise à jour de `colonnes_ref.csv` ou `valeurs_ref.csv`, relancez le
+pipeline pour reprendre le traitement.
+
 ## Journaux d'exécution
 
 Chaque lancement du pipeline crée un fichier `run_<horodatage>.log` dans `chronogram_pipeline/data/control/`. Ces journaux sont au format JSON et contiennent les messages techniques ainsi que les métriques de chaque étape du traitement. Ils permettent de tracer précisément les actions réalisées, notamment les appels à l'IA lors de la standardisation des en‑têtes.

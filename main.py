@@ -10,7 +10,6 @@ import yaml
 from chronogram_pipeline.src import (
     data_cleaner,
     excel_parser,
-    standardizer,
     db_utils,
     mapping_utils,
     PipelineLogger,
@@ -80,9 +79,12 @@ def run_pipeline(
         config_dir = Path(__file__).resolve().parent / "chronogram_pipeline" / "config"
     else:
         config_dir = Path(config_dir)
-    mapping_headers = config_dir / "mapping_headers.csv"
-    mapping_values = config_dir / "mapping_values.csv"
+    mapping_dir = Path(__file__).resolve().parent / "mapping"
+    columns_ref = mapping_dir / "colonnes_ref.csv"
+    values_ref = mapping_dir / "valeurs_ref.csv"
     schema_yaml = config_dir / "schema_definition.yaml"
+    column_map = data_cleaner.load_column_mapping(columns_ref)
+    value_map = data_cleaner.load_value_mapping(values_ref)
 
     if log_dir is not None:
         os.environ["CHRONO_LOG_DIR"] = str(log_dir)
@@ -137,33 +139,19 @@ def run_pipeline(
         m["rows"] = len(df_raw)
 
     with plog.step("CLEAN_DATA") as m:
-        df_clean = data_cleaner.clean_data(df_raw, chrono_rank=chrono_id)
+        df_clean = data_cleaner.clean_data(
+            df_raw,
+            chrono_rank=chrono_id,
+            column_map=column_map,
+            value_map=value_map,
+            columns_file=columns_ref,
+            values_file=values_ref,
+            chrono_name=metadata.get("nom_chronogramme"),
+        )
         m["rows"] = len(df_clean)
 
-    with plog.step("STANDARDIZE_HEADERS"):
-        try:
-            headers = standardizer.standardize_headers(
-                df_clean.columns,
-                mapping_csv=mapping_headers,
-                schema_path=schema_yaml,
-                file_name=xlsx_file.stem,
-                log_xlsx=mapping_log,
-                id_chronogramme=chrono_id,
-            )
-        except Exception:
-            headers = standardizer.standardize_headers_rules(
-                df_clean.columns,
-                mapping_csv=mapping_headers,
-                log_xlsx=mapping_log,
-                id_chronogramme=chrono_id,
-            )
-        df_clean.columns = headers
-
     with plog.step("APPLY_SCHEMA"):
-        df_clean = apply_schema_columns(df_clean, schema_yaml)
-
-    with plog.step("STANDARDIZE_VALUES"):
-        df_std = standardize_column_values(df_clean, mapping_values, schema_path=schema_yaml)
+        df_std = apply_schema_columns(df_clean, schema_yaml)
 
     with plog.step("ENRICH_DATA") as m:
         df_enriched = enrich_data(
@@ -230,6 +218,10 @@ def main() -> None:
     logger = get_logger("main")
     try:
         result = run_pipeline(args.file, logger_name="main", metadata=metadata)
+    except StopIteration as exc:  # pragma: no cover - CLI handling
+        logger.warning("Pipeline stopped: %s", exc)
+        print("Compl\u00e9ter les feuilles 'nouvelles' dans mapping/ puis relancer.")
+        sys.exit(2)
     except Exception as exc:  # pragma: no cover - CLI handling
         logger.exception("Pipeline failed")
         print(f"\u00c9CHEC : {exc}")
