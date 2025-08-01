@@ -3,6 +3,7 @@ import pandas as pd
 import unicodedata
 import logging
 import warnings
+import csv
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -61,7 +62,9 @@ def find_header_row(df: pd.DataFrame, keywords: Iterable[str]) -> int:
 def extract_table(file: Path, sheet: str) -> pd.DataFrame:
     """Extract main data table from *sheet* of *file*."""
     df_raw = pd.read_excel(file, sheet_name=sheet, header=None)
-    header_row = find_header_row(df_raw, ["emetteur", "destinataire", "modalite", "type", "nature"])
+    header_row = find_header_row(
+        df_raw, ["emetteur", "destinataire", "recepteur", "modalite", "type", "nature"]
+    )
     df = pd.read_excel(file, sheet_name=sheet, header=header_row)
     df.dropna(axis=1, how="all", inplace=True)
     return df
@@ -81,8 +84,8 @@ def canonical_column(name: str) -> str | None:
     name = normalize_text(name)
     if "emetteur" in name:
         return "emetteur"
-    if "destinataire" in name:
-        return "destinataire"
+    if "destinataire" in name or "recepteur" in name:
+        return "recepteur"
     if "modalite" in name:
         return "modalite"
     if "type" in name or "nature" in name:
@@ -116,7 +119,7 @@ def enrich_mapping_values(input_dir: Path, header_map_path: Path, values_path: P
                     existing.add(key)
                     added_lines += 1
     values_df.drop_duplicates(inplace=True)
-    values_df.to_csv(values_path, index=False)
+    values_df.to_csv(values_path, index=False, quoting=csv.QUOTE_MINIMAL)
     logger.info("%d columns inspected", cols_inspected)
     logger.info("%d new raw values added", added_lines)
     logger.info("%d total lines now in %s", len(values_df), values_path)
@@ -214,6 +217,6 @@ def update_mapping_headers(input_dir: Path, mapping_csv: Path, max_files: int = 
         df.loc[len(df)] = [header, ""]
 
     if new_entries:
-        df.to_csv(mapping_csv, index=False)
+        df.to_csv(mapping_csv, index=False, quoting=csv.QUOTE_MINIMAL)
     logger.info("%d headers extracted, %d new entries added", total_headers, len(new_entries))
     return total_headers, len(new_entries)

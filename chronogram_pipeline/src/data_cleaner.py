@@ -1,5 +1,3 @@
-"""Data cleaning utilities for chronogram tables."""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -163,7 +161,9 @@ def _append_new_columns(path_ref: Path, columns: Iterable[str], chrono_name: str
     df.to_csv(path_ref, index=False)
 
 
-def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]], chrono_name: str | None = None) -> None:
+def _append_new_values(
+    path_ref: Path, rows: Iterable[tuple[str, str]], chrono_name: str | None = None
+) -> None:
     """Append unknown values to ``path_ref`` CSV with placeholder."""
     if path_ref.exists():
         df = pd.read_csv(path_ref, dtype=str)
@@ -232,7 +232,7 @@ def _apply_mappings(
         mapping = value_map.get(_norm(col))
         if not mapping:
             continue
-        new_vals = []
+        new_vals: list[str] = []
 
         def convert(val):
             if pd.isna(val) or str(val).strip() == "":
@@ -242,8 +242,8 @@ def _apply_mappings(
             if norm_val not in mapping:
                 new_vals.append(raw)
                 return pd.NA
-            mapped = mapping[norm_val]
-            return pd.NA if mapped == "" else mapped
+            mapped_val = mapping[norm_val]
+            return pd.NA if mapped_val == "" else mapped_val
 
         df[col] = df[col].map(convert)
 
@@ -302,17 +302,20 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         values = [
             str(row[c]).strip()
             for c in cols
-            if c in row and not pd.isna(row[c]) and str(row[c]).strip() != ""
+            if c in row.index and pd.notna(row[c]) and str(row[c]).strip() != ""
         ]
         if not values:
             return False
-        counts = {}
+        counts: Dict[str, int] = {}
         for v in values:
             counts[v] = counts.get(v, 0) + 1
         return max(counts.values()) >= 6
 
     mask = df.apply(is_repeat, axis=1)
-    return df.loc[~mask].reset_index(drop=True)
+    cleaned = df.loc[~mask].reset_index(drop=True)
+    if cleaned.empty and not df.empty:
+        return df.reset_index(drop=True)
+    return cleaned
 
 
 def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
@@ -354,7 +357,7 @@ def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataF
         "commentaires",
     ]
 
-    rename = {}
+    rename: Dict[str, str] = {}
     for col in list(df.columns):
         norm = normalize_text(col)
         if norm in mapping:

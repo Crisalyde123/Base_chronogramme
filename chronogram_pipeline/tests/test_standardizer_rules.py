@@ -10,7 +10,7 @@ from src.standardizer import standardize_headers_rules
 def test_standardize_headers_rules(tmp_path):
     mapping_csv = tmp_path / "mapping_headers.csv"
     mapping_csv.write_text(
-        "En-tete original,En-tete standard\nDescriptif,Contenu\nDestinataires,Destinataire\n"
+        "En-tete original,En-tete standard\nDescriptif,Contenu\nDestinataires,Recepteur\n"
     )
 
     log_xlsx = tmp_path / "log.xlsx"
@@ -20,7 +20,7 @@ def test_standardize_headers_rules(tmp_path):
         headers, mapping_csv=mapping_csv, log_xlsx=log_xlsx, id_chronogramme=42
     )
 
-    assert out == ["Contenu", "Destinataire", ""]
+    assert out == ["Contenu", "Recepteur", ""]
 
     df = pd.read_excel(log_xlsx)
     assert list(df.columns) == [

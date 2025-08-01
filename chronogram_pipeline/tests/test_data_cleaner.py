@@ -15,19 +15,16 @@ from src.data_cleaner import (
 
 
 def test_clean_data_removes_noise():
-    df = pd.DataFrame(
-        [
-            ["H1", "H2", "Empty"],
-            ["val1", "val2", ""],
-            ["TOTAL", "", ""],
-            ["phase 1", "", ""],
-            [None, None, None],
-        ]
-    )
+    df = pd.DataFrame([
+        ["H1", "H2", "Empty"],
+        ["val1", "val2", ""],
+        ["TOTAL", "", ""],
+        ["phase 1", "", ""],
+        [None, None, None],
+    ])
 
     out = clean_data(df, chrono_rank=2)
-
-    # Header row is kept; first data row numbered L001
+    # On garde l’entête + deux vraies lignes
     assert out.shape[0] == 2
     assert list(out["numero"]) == ["L001", "L002"]
 
@@ -37,31 +34,27 @@ def test_unmerge_cells_series_forward_fill():
         "A": ["val1", None, None],
         "B": [None, None, "val2"],
     })
-
-    # Call directly on a Series to emulate intermediate processing
     series_input = raw.loc[0]
     out = unmerge_cells(series_input)
     assert isinstance(out, pd.DataFrame)
-    # Horizontal propagation should duplicate the value on the row
+    # La cellule A se réplique horizontalement
     assert list(out.iloc[0]) == ["val1", "val1"]
 
 
 def test_standardize_and_clean_nominal():
-    df = pd.DataFrame(
-        {
-            "phase": [1],
-            "statut": ["joué"],
-            "type": ["structurant"],
-            "horodatage": ["21/02/2024 09:30"],
-            "emetteur": ["A"],
-            "recepteur": ["B"],
-            "nature": ["mail"],
-            "resume": ["r"],
-            "contenu": ["c"],
-            "actions_attendues": ["a"],
-            "commentaires": [""],
-        }
-    )
+    df = pd.DataFrame({
+        "phase": [1],
+        "statut": ["joué"],
+        "type": ["structurant"],
+        "horodatage": ["21/02/2024 09:30"],
+        "emetteur": ["A"],
+        "recepteur": ["B"],
+        "nature": ["mail"],
+        "resume": ["r"],
+        "contenu": ["c"],
+        "actions_attendues": ["a"],
+        "commentaires": [""],
+    })
 
     out = standardize_and_clean(df, chrono_rank=3)
     assert out["id_chronogramme"].iloc[0] == "C003"
@@ -84,14 +77,17 @@ def test_standardize_and_clean_drop_repeated():
         "commentaires": ["", "Texte"],
     })
     out = standardize_and_clean(df)
+    # La deuxième ligne répétitive doit être supprimée
     assert out.shape[0] == 1
 
 
 def test_standardize_and_clean_invalid_value():
     df = pd.DataFrame({"statut": ["invalid"]})
     out = standardize_and_clean(df)
+    # Une valeur non reconnue devient NaN
     assert pd.isna(out["statut"].iloc[0])
 
+# Helpers for mapping tests
 
 def _create_column_file(path: Path, rows: list[tuple[str, str, str]]):
     pd.DataFrame(rows, columns=["raw_name", "mapped_name", "nom_chronogramme"]).to_csv(path, index=False)
@@ -141,7 +137,9 @@ def test_clean_data_new_column(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chrono_name="test",
         )
+
     df_new = pd.read_csv(col_file)
     row = df_new.loc[df_new["raw_name"] == "Unknown"].iloc[0]
     assert row["mapped_name"] == "XXX"
@@ -164,8 +162,9 @@ def test_clean_data_new_value(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chrono_name="test2",
         )
+
     df_new = pd.read_csv(val_file)
     rows = set(df_new.itertuples(index=False, name=None))
-    assert any(r[0] == "alpha" and r[1] == "foo" and r[2] == "XXX" for r in rows)
-
+    assert any(r[0] == "alpha" and r[1] == "foo" and r[2] == "XXX" and r[3] == "test2" for r in rows)

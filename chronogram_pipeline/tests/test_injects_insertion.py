@@ -31,7 +31,7 @@ def test_insert_injects_and_update_stats(tmp_path):
         "horodatage": ["T0", "T1", "T2", "T3", "T4"],
         "description": ["a", "b", "c", "d", "e"],
         "emetteur": ["X"] * 5,
-        "destinataire": ["Y"] * 5,
+        "recepteur": ["Y"] * 5,
         "type_inject": ["Info"] * 5,
         "modalite": ["Mail"] * 5,
         "phase_exercice": ["P"] * 5,

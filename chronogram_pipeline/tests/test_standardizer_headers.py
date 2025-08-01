@@ -13,7 +13,7 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
     mapping_csv.write_text("En-tête original,En-tête standard\nDescriptif,Contenu\n")
 
     schema_yaml = tmp_path / "schema.yaml"
-    schema_yaml.write_text("fields:\n  - name: Contenu\n  - name: Destinataire\n  - name: Modalité\n")
+    schema_yaml.write_text("fields:\n  - name: Contenu\n  - name: Recepteur\n  - name: Modalité\n")
 
     prompts_dir = tmp_path / "prompts"
 
@@ -21,7 +21,7 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
 
     def fake_gpt(header, allowed):
         calls.append(header)
-        return "Destinataire"
+        return "Recepteur"
 
     headers = ["Descriptif", "Destinataires"]
 
@@ -37,7 +37,7 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
         id_chronogramme=10,
     )
 
-    assert out == ["Contenu", "Destinataire"]
+    assert out == ["Contenu", "Recepteur"]
     assert calls == ["Destinataires"]
 
     df = pd.read_csv(mapping_csv)

@@ -20,12 +20,12 @@ def test_standardize_headers_logs_ai_call(tmp_path, monkeypatch):
     mapping_csv.write_text("")
 
     schema = tmp_path / "schema.yaml"
-    schema.write_text("fields:\n  - name: Destinataire\n")
+    schema.write_text("fields:\n  - name: Recepteur\n")
 
     prompts = tmp_path / "prompts"
 
     def fake(header, allowed):
-        return "Destinataire"
+        return "Recepteur"
 
     standardize_headers(
         ["Dest"],

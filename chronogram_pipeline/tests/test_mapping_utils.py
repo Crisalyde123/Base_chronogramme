@@ -33,7 +33,7 @@ def test_enrich_mapping_values(tmp_path):
     # Expect 8 rows (4 columns x 2 unique values)
     assert len(result) == 8
     assert (result["Colonne"] == "emetteur").sum() == 2
-    assert (result["Colonne"] == "destinataire").sum() == 2
+    assert (result["Colonne"] == "recepteur").sum() == 2
     assert (result["Colonne"] == "type_inject").sum() == 2
     assert (result["Colonne"] == "modalite").sum() == 2
 

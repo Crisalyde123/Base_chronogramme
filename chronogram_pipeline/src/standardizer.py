@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Dict
 from datetime import datetime, timezone
+import csv
 
 import pandas as pd
 import requests
@@ -54,7 +55,7 @@ def _save_mapping(mapping_csv: Path, mapping: Mapping[str, str]) -> None:
     """Write header ``mapping`` to ``mapping_csv`` in UTF-8."""
     df = pd.DataFrame(list(mapping.items()), columns=["En-tête original", "En-tête standard"])
     mapping_csv.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(mapping_csv, index=False, encoding="utf-8")
+    df.to_csv(mapping_csv, index=False, encoding="utf-8", quoting=csv.QUOTE_MINIMAL)
 
 
 def _load_schema(schema_path: Path | None) -> List[str]:

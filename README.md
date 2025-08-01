@@ -34,6 +34,7 @@ le service utilisé.
 
 ## Mapping manuel
 
+
 - Le dossier `mapping/` contient les références utilisées par le pipeline :
   - `colonnes_ref.csv` : colonnes `raw_name`, `mapped_name` et `nom_chronogramme`.
     Les nouvelles colonnes détectées sont ajoutées avec `mapped_name` à `XXX` et
@@ -46,6 +47,7 @@ le service utilisé.
 
 Les ajouts automatiques appliquent une normalisation (minuscules sans espaces) et
 la suppression des doublons pour faciliter la complétion manuelle.
+
 
 Après mise à jour de `colonnes_ref.csv` ou `valeurs_ref.csv`, relancez le
 pipeline pour reprendre le traitement.
