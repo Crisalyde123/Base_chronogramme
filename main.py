@@ -80,11 +80,13 @@ def run_pipeline(
     else:
         config_dir = Path(config_dir)
     mapping_dir = Path(__file__).resolve().parent / "mapping"
-    columns_ref = mapping_dir / "colonnes_ref.csv"
-    values_ref = mapping_dir / "valeurs_ref.csv"
+    columns_ref = mapping_dir / "colonnes.csv"
+    values_ref = mapping_dir / "valeurs.csv"
+    history_csv = mapping_dir / "historique_associations.csv"
     schema_yaml = config_dir / "schema_definition.yaml"
-    column_map = data_cleaner.load_column_mapping(columns_ref)
-    value_map = data_cleaner.load_value_mapping(values_ref)
+    column_map = data_cleaner.load_column_mapping(columns_ref, history_file=history_csv)
+    value_map = data_cleaner.load_value_mapping(values_ref, history_file=history_csv)
+    column_map["chronogramme"] = "chronogramme"
 
     if log_dir is not None:
         os.environ["CHRONO_LOG_DIR"] = str(log_dir)
@@ -137,6 +139,7 @@ def run_pipeline(
                 header=header_row - 1,
                 usecols=range(first_col - 1, last_col),
             )
+            df_raw.insert(0, "chronogramme", metadata["nom_chronogramme"])
             m["rows"] = len(df_raw)
 
         with plog.step("CLEAN_DATA") as m:
@@ -147,6 +150,8 @@ def run_pipeline(
                 value_map=value_map,
                 columns_file=columns_ref,
                 values_file=values_ref,
+                chronogramme=metadata["nom_chronogramme"],
+                history_file=history_csv,
             )
             m["rows"] = len(df_clean)
 

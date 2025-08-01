@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, List
 import csv
 
 import pandas as pd
@@ -12,61 +12,118 @@ import pandas as pd
 from .mapping_utils import normalize_text
 
 
-def load_column_mapping(path_ref: Path) -> Dict[str, str]:
-    """Return column name mapping from CSV file at ``path_ref``."""
+def _log_history(path: Path, rows: List[Dict[str, str]]) -> None:
+    """Append mapping history rows to ``path``."""
+    if not rows:
+        return
+    if path.exists():
+        df = pd.read_csv(path)
+    else:
+        df = pd.DataFrame(
+            columns=["timestamp", "chronogramme", "category", "column", "raw", "mapped"]
+        )
+    for row in rows:
+        df.loc[len(df)] = row
+    df.to_csv(path, index=False, quoting=csv.QUOTE_MINIMAL)
+
+
+def load_column_mapping(path_ref: Path, history_file: Path | None = None) -> Dict[str, str]:
+    """Return column name mapping from CSV file at ``path_ref`` and purge applied lines."""
     if not path_ref.exists():
-        pd.DataFrame(columns=["raw_name", "mapped_name"]).to_csv(
+        pd.DataFrame(columns=["chronogramme", "raw_name", "mapped_name"]).to_csv(
             path_ref, index=False, quoting=csv.QUOTE_MINIMAL
         )
         return {}
 
-    df = pd.read_csv(path_ref)
+    df = pd.read_csv(path_ref, dtype=str)
     df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
     mapping: Dict[str, str] = {}
+    keep_rows = []
+    history: List[Dict[str, str]] = []
     for _, row in df.iterrows():
         raw = row.get("raw_name")
         mapped = row.get("mapped_name")
+        chrono = row.get("chronogramme", "")
         if pd.isna(raw):
             continue
         raw = str(raw)
-        mapped = "" if pd.isna(mapped) else str(mapped)
-        if mapped == "XXX":
-            # waiting for manual association
+        mapped_val = "" if pd.isna(mapped) else str(mapped)
+        if mapped_val == "X":
+            keep_rows.append(row)
             continue
-        if mapped == "":
+        if mapped_val in ("", "__DROP__"):
             mapping[raw] = "__DROP__"
         else:
-            mapping[raw] = mapped
+            mapping[raw] = mapped_val
+        history.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "chronogramme": chrono,
+                "category": "column",
+                "column": raw,
+                "raw": raw,
+                "mapped": mapping[raw],
+            }
+        )
+
+    pd.DataFrame(keep_rows, columns=df.columns).to_csv(
+        path_ref, index=False, quoting=csv.QUOTE_MINIMAL
+    )
+    if history_file is not None:
+        _log_history(history_file, history)
+
     return mapping
 
 
-def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
-    """Return per-column value mapping from CSV file at ``path_ref``."""
+def load_value_mapping(path_ref: Path, history_file: Path | None = None) -> Dict[str, Dict[str, str]]:
+    """Return per-column value mapping from CSV and purge applied lines."""
     if not path_ref.exists():
-        pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"]).to_csv(
-            path_ref, index=False, quoting=csv.QUOTE_MINIMAL
-        )
+        pd.DataFrame(
+            columns=["chronogramme", "column_name", "raw_value", "mapped_value"]
+        ).to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
         return {}
 
-    df = pd.read_csv(path_ref)
+    df = pd.read_csv(path_ref, dtype=str)
     df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
     mapping: Dict[str, Dict[str, str]] = {}
+    keep_rows = []
+    history: List[Dict[str, str]] = []
     for _, row in df.iterrows():
         col = row.get("column_name")
         raw = row.get("raw_value")
         mapped = row.get("mapped_value")
+        chrono = row.get("chronogramme", "")
         if pd.isna(col) or pd.isna(raw):
             continue
         col = str(col)
         raw = str(raw)
-        mapped = "" if pd.isna(mapped) else str(mapped)
-        if mapped == "XXX":
+        mapped_val = "" if pd.isna(mapped) else str(mapped)
+        if mapped_val == "X":
+            keep_rows.append(row)
             continue
-        mapping.setdefault(col, {})[raw] = mapped
+        if mapped_val == "__EMPTY__" or mapped_val == "":
+            final_val = ""
+        else:
+            final_val = mapped_val
+        mapping.setdefault(col, {})[raw] = final_val
+        history.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "chronogramme": chrono,
+                "category": "value",
+                "column": col,
+                "raw": raw,
+                "mapped": final_val,
+            }
+        )
+
+    pd.DataFrame(keep_rows, columns=df.columns).to_csv(
+        path_ref, index=False, quoting=csv.QUOTE_MINIMAL
+    )
+    if history_file is not None:
+        _log_history(history_file, history)
 
     return mapping
 
@@ -129,37 +186,44 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _append_new_columns(path_ref: Path, columns: Iterable[str]) -> None:
-    """Append unknown column names to ``path_ref`` CSV with empty mapping."""
+def _append_new_columns(path_ref: Path, chronogramme: str, columns: Iterable[str]) -> None:
+    """Append unknown column names to ``path_ref`` CSV with placeholder."""
     if path_ref.exists():
-        df = pd.read_csv(path_ref)
+        df = pd.read_csv(path_ref, dtype=str)
     else:
-        df = pd.DataFrame(columns=["raw_name", "mapped_name"])
+        df = pd.DataFrame(columns=["chronogramme", "raw_name", "mapped_name"])
 
     existing = set(df.get("raw_name", []))
     for col in columns:
         if col not in existing:
-            df.loc[len(df)] = {"raw_name": col, "mapped_name": "XXX"}
+            df.loc[len(df)] = {
+                "chronogramme": chronogramme,
+                "raw_name": col,
+                "mapped_name": "X",
+            }
             existing.add(col)
 
     df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
 
-def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
+def _append_new_values(path_ref: Path, chronogramme: str, rows: Iterable[tuple[str, str]]) -> None:
     """Append unknown values to ``path_ref`` CSV with placeholder."""
     if path_ref.exists():
-        df = pd.read_csv(path_ref)
+        df = pd.read_csv(path_ref, dtype=str)
     else:
-        df = pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"])
+        df = pd.DataFrame(
+            columns=["chronogramme", "column_name", "raw_value", "mapped_value"]
+        )
 
     existing = set(zip(df.get("column_name", []), df.get("raw_value", [])))
     for col, val in rows:
         if (col, val) not in existing:
             df.loc[len(df)] = {
+                "chronogramme": chronogramme,
                 "column_name": col,
                 "raw_value": val,
-                "mapped_value": "XXX",
+                "mapped_value": "X",
             }
     df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
@@ -172,13 +236,15 @@ def _apply_mappings(
     *,
     columns_file: Path,
     values_file: Path,
+    chronogramme: str,
+    history_file: Path | None = None,
 ) -> pd.DataFrame:
     """Rename columns and replace values using provided mappings."""
     df = df.copy()
 
     unknown_cols = [c for c in df.columns if c not in column_map]
     if unknown_cols:
-        _append_new_columns(columns_file, unknown_cols)
+        _append_new_columns(columns_file, chronogramme, unknown_cols)
         raise StopIteration("Nouveau nom de colonne à mapper")
 
     rename: Dict[str, str] = {}
@@ -187,8 +253,36 @@ def _apply_mappings(
         mapped = column_map.get(col)
         if mapped == "__DROP__":
             drop_cols.append(col)
+            if history_file is not None:
+                _log_history(
+                    history_file,
+                    [
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "chronogramme": chronogramme,
+                            "category": "column",
+                            "column": col,
+                            "raw": col,
+                            "mapped": "__DROP__",
+                        }
+                    ],
+                )
         else:
             rename[col] = mapped
+            if history_file is not None and col != mapped:
+                _log_history(
+                    history_file,
+                    [
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "chronogramme": chronogramme,
+                            "category": "column",
+                            "column": col,
+                            "raw": col,
+                            "mapped": mapped,
+                        }
+                    ],
+                )
 
     df = df.rename(columns=rename)
     if drop_cols:
@@ -198,23 +292,42 @@ def _apply_mappings(
         mapping = value_map.get(col)
         if not mapping:
             continue
-        new_vals = []
+        new_vals: List[str] = []
+        used_pairs: List[tuple[str, str]] = []
 
-        def convert(val):
+        def convert(val: object) -> object:
             if pd.isna(val) or str(val).strip() == "":
                 return pd.NA
             raw = str(val)
             if raw not in mapping:
-                new_vals.append(raw)
+                if raw not in new_vals:
+                    new_vals.append(raw)
                 return pd.NA
-            mapped = mapping[raw]
-            return pd.NA if mapped == "" else mapped
+            mapped_val = mapping[raw]
+            used_pairs.append((raw, mapped_val))
+            return "" if mapped_val == "" else mapped_val
 
         df[col] = df[col].map(convert)
 
         if new_vals:
-            _append_new_values(values_file, [(col, v) for v in new_vals])
+            _append_new_values(values_file, chronogramme, [(col, v) for v in new_vals])
             raise StopIteration("Nouvelles valeurs à mapper")
+
+        if history_file is not None and used_pairs:
+            _log_history(
+                history_file,
+                [
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "chronogramme": chronogramme,
+                        "category": "value",
+                        "column": col,
+                        "raw": r,
+                        "mapped": m,
+                    }
+                    for r, m in used_pairs
+                ],
+            )
 
     return df
 
@@ -354,6 +467,8 @@ def clean_data(
     value_map: Dict[str, Dict[str, str]] | None = None,
     columns_file: Path | None = None,
     values_file: Path | None = None,
+    chronogramme: str | None = None,
+    history_file: Path | None = None,
 ) -> pd.DataFrame:
     """Return ``df`` cleaned, optionally using manual mappings."""
     df = unmerge_cells(df)
@@ -362,13 +477,20 @@ def clean_data(
     df = remove_parasitic_rows(df)
     df.reset_index(drop=True, inplace=True)
 
-    if column_map is not None and columns_file is not None and values_file is not None:
+    if (
+        column_map is not None
+        and columns_file is not None
+        and values_file is not None
+        and chronogramme is not None
+    ):
         df = _apply_mappings(
             df,
             column_map,
             value_map or {},
             columns_file=columns_file,
             values_file=values_file,
+            chronogramme=chronogramme,
+            history_file=history_file,
         )
 
     df = standardize_and_clean(df, chrono_rank=chrono_rank)

@@ -105,18 +105,32 @@ def test_no_total_line_loss():
 
 # Helpers for mapping tests
 def _create_column_file(path: Path, rows: list[tuple[str, str]]):
-    pd.DataFrame(rows, columns=["raw_name", "mapped_name"]).to_csv(path, index=False)
+    pd.DataFrame(
+        [{"chronogramme": "TEST", "raw_name": r, "mapped_name": m} for r, m in rows],
+        columns=["chronogramme", "raw_name", "mapped_name"],
+    ).to_csv(path, index=False)
 
 
 def _create_value_file(path: Path, rows: list[tuple[str, str, str]]):
-    pd.DataFrame(rows, columns=["column_name", "raw_value", "mapped_value"]).to_csv(path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "chronogramme": "TEST",
+                "column_name": c,
+                "raw_value": r,
+                "mapped_value": m,
+            }
+            for c, r, m in rows
+        ],
+        columns=["chronogramme", "column_name", "raw_value", "mapped_value"],
+    ).to_csv(path, index=False)
 
 
 def test_load_mapping_and_clean(tmp_path):
     col_file = tmp_path / "colonnes.csv"
     val_file = tmp_path / "valeurs.csv"
     _create_column_file(col_file, [("A", "alpha"), ("B", "")])
-    _create_value_file(val_file, [("alpha", "x", "X")])
+    _create_value_file(val_file, [("alpha", "x", "Y")])
 
     col_map = load_column_mapping(col_file)
     val_map = load_value_mapping(val_file)
@@ -129,11 +143,12 @@ def test_load_mapping_and_clean(tmp_path):
         value_map=val_map,
         columns_file=col_file,
         values_file=val_file,
+        chronogramme="TEST",
     )
 
     assert "alpha" in out.columns
     assert "B" not in out.columns
-    assert out["alpha"].iloc[0] == "X"
+    assert out["alpha"].iloc[0] == "Y"
 
 
 def test_clean_data_new_column(tmp_path):
@@ -152,12 +167,13 @@ def test_clean_data_new_column(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chronogramme="TEST",
         )
 
-    # La colonne inconnue doit avoir été ajoutée dans cols.csv avec mapped_name "XXX"
+    # La colonne inconnue doit avoir été ajoutée dans cols.csv avec mapped_name "X"
     df_new = pd.read_csv(col_file)
     assert (df_new["raw_name"] == "Unknown").any()
-    assert (df_new.loc[df_new["raw_name"] == "Unknown", "mapped_name"] == "XXX").any()
+    assert (df_new.loc[df_new["raw_name"] == "Unknown", "mapped_name"] == "X").any()
 
 
 def test_clean_data_new_value(tmp_path):
@@ -176,9 +192,10 @@ def test_clean_data_new_value(tmp_path):
             value_map=val_map,
             columns_file=col_file,
             values_file=val_file,
+            chronogramme="TEST",
         )
 
-    # La nouvelle valeur brute "foo" doit avoir été enregistrée avec "XXX"
+    # La nouvelle valeur brute "foo" doit avoir été enregistrée avec "X"
     df_new = pd.read_csv(val_file)
     values = set(df_new.itertuples(index=False, name=None))
-    assert ("alpha", "foo", "XXX") in values
+    assert ("TEST", "alpha", "foo", "X") in values

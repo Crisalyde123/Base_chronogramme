@@ -34,18 +34,17 @@ le service utilisé.
 
 ## Mapping manuel
 
-Le dossier `mapping/` contient les références utilisées par le pipeline :
+- Le dossier `mapping/` contient les références utilisées par le pipeline :
 
-- `colonnes_ref.csv` : fichier à deux colonnes `raw_name` et `mapped_name`. Les
-- nouvelles colonnes détectées sont ajoutées avec `mapped_name` à `XXX`.
-- `valeurs_ref.csv` : fichier à trois colonnes `column_name`, `raw_value` et
-  `mapped_value`. Les nouvelles valeurs sont ajoutées avec `mapped_value` à
-  `XXX`.
+- `colonnes.csv` : colonnes `chronogramme`, `raw_name` et `mapped_name`.
+  Les nouvelles colonnes rencontrées sont ajoutées avec `mapped_name` mis à `X`.
+- `valeurs.csv` : colonnes `chronogramme`, `column_name`, `raw_value` et
+  `mapped_value`. Les valeurs inconnues sont ajoutées avec `mapped_value` à `X`.
 - `colonnes_standardisees.csv` : liste des noms de colonnes cibles possibles.
 - `valeurs_standardisees.csv` : valeurs autorisées pour certaines colonnes.
 
-Après mise à jour de `colonnes_ref.csv` ou `valeurs_ref.csv`, relancez le
-pipeline pour reprendre le traitement.
+Après avoir complété `colonnes.csv` ou `valeurs.csv`, relancez le pipeline pour
+reprendre le traitement.
 
 ## Journaux d'exécution
 
