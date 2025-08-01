@@ -1,13 +1,14 @@
 import openpyxl
 import pandas as pd
 import unicodedata
-import logging
 import warnings
 import csv
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
-logger = logging.getLogger(__name__)
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def normalize_text(text: str) -> str:
