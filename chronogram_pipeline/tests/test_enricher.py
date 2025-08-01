@@ -43,3 +43,17 @@ def test_enrich_data_completes_missing_ids(tmp_path):
     assert out["id_inject"].tolist() == ["C002_L001", "C002_L002", "C002_L003", "C002_L004"]
     assert list(out["nb_injects"].unique()) == [4]
 
+
+def test_enrich_data_preserves_input():
+    df = pd.DataFrame({"numero": [5], "Contenu": ["A"]})
+    df_copy = df.copy(deep=True)
+    enrich_data(
+        df,
+        id_chronogramme=3,
+        etablissement_nom="E",
+        etablissement_type="T",
+        nom_chronogramme="N",
+        date_exercice="2024",
+    )
+    assert df.equals(df_copy)
+
