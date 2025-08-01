@@ -12,7 +12,7 @@ Ce document résume brièvement le rôle des principaux fichiers du projet.
 - **`scripts/process_new_inputs.py`** : traite tous les fichiers présents dans
   `data/inputs/` puis les archive automatiquement.
 
-## Répertoire `config/`
+## Répertoire `chronogram_pipeline/config/`
 
 - **`mapping_headers.csv`** : correspondances entre intitulés d'en‑têtes et champs standards.
 - **`mapping_values.csv`** : correspondances de valeurs pour certaines colonnes.

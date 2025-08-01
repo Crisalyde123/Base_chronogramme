@@ -1,39 +1,51 @@
 ---
 fields:
-  - name: id_inject
-    type: string
-    required: true
-  - name: horodatage
+  - name: phase
     type: string
     required: false
-  - name: description
+    values: ["1", "2", "3", "4"]
+  - name: statut
+    type: string
+    required: false
+    values: ["joué", "annulé", "à jouer"]
+  - name: type
+    type: string
+    required: false
+    values: ["structurant", "saturant"]
+  - name: horodatage
     type: string
     required: false
   - name: emetteur
     type: string
     required: false
-  - name: destinataire
+  - name: recepteur
     type: string
     required: false
-  - name: type_inject
+  - name: nature
+    type: string
+    required: false
+    values: ["mail", "appel", "SMS", "vidéo", "Weezer", "oral"]
+  - name: resume
+    type: string
+    required: false
+  - name: contenu
+    type: string
+    required: false
+  - name: actions_attendues
+    type: string
+    required: false
+  - name: commentaires
+    type: string
+    required: false
+  - name: id_inject
     type: string
     required: true
-    values: ["Critique", "Important", "Secondaire"]
-  - name: modalite
+  - name: id_chronogramme
     type: string
-    required: false
-  - name: phase_exercice
-    type: string
-    required: false
-  - name: observations
-    type: string
-    required: false
-  - name: etablissement_nom
-    type: string
-    required: false
-  - name: etablissement_type
-    type: string
-    required: false
+    required: true
+  - name: numero
+    type: integer
+    required: true
 
 database:
   engine: sqlite
