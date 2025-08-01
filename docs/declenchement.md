@@ -33,7 +33,11 @@ Le fichier est stocké dans `data/inputs/` puis traité par `main.py`.
 
 ## 3. Via un script automatisé (cron, API…)
 
-Intégrez simplement l'appel à `main.py` dans votre tâche planifiée ou votre service. Veillez à ce que le `PYTHONPATH` pointe vers le projet et que le fichier Excel ainsi que les métadonnées soient accessibles. L'appel se fait avec les mêmes arguments que ci‑dessus.
+Une tâche planifiée peut appeler le script `scripts/process_new_inputs.py` qui
+recherche tous les fichiers `.xlsx` dans `data/inputs/`. Pour chacun, il lance
+`main.py` puis déplace le fichier traité dans `data/archive/raw_excels/` avec un
+horodatage. Ce script constitue le point d'entrée recommandé pour automatiser le
+traitement continu.
 
 ## 4. Traitement en lot des échantillons
 
