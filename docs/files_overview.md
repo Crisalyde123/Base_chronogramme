@@ -7,7 +7,6 @@ Ce document résume brièvement le rôle des principaux fichiers du projet.
 - **`main.py`** : point d'entrée du pipeline. Orchestration de l'import des fichiers Excel, du nettoyage et de l'insertion en base.
 - **`README.md`** : vue d'ensemble rapide du projet et des journaux d'exécution.
 - **`Specifications_techniques.md`** : spécifications détaillées du pipeline et des choix techniques.
-- **`retest_env.ps1`** : script PowerShell pour tester l'environnement (installation des dépendances et exécution des tests).
 - **`requirements.txt`** : dépendances Python nécessaires au fonctionnement du projet.
 - **`scripts/process_new_inputs.py`** : traite tous les fichiers présents dans
   `data/inputs/` puis les archive automatiquement.
