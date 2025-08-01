@@ -61,7 +61,9 @@ def find_header_row(df: pd.DataFrame, keywords: Iterable[str]) -> int:
 def extract_table(file: Path, sheet: str) -> pd.DataFrame:
     """Extract main data table from *sheet* of *file*."""
     df_raw = pd.read_excel(file, sheet_name=sheet, header=None)
-    header_row = find_header_row(df_raw, ["emetteur", "destinataire", "modalite", "type", "nature"])
+    header_row = find_header_row(
+        df_raw, ["emetteur", "destinataire", "recepteur", "modalite", "type", "nature"]
+    )
     df = pd.read_excel(file, sheet_name=sheet, header=header_row)
     df.dropna(axis=1, how="all", inplace=True)
     return df
@@ -81,8 +83,8 @@ def canonical_column(name: str) -> str | None:
     name = normalize_text(name)
     if "emetteur" in name:
         return "emetteur"
-    if "destinataire" in name:
-        return "destinataire"
+    if "destinataire" in name or "recepteur" in name:
+        return "recepteur"
     if "modalite" in name:
         return "modalite"
     if "type" in name or "nature" in name:

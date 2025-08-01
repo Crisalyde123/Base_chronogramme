@@ -73,7 +73,7 @@ def test_injects_completion(tmp_path):
             "horodatage": ["T0", "T1"],
             "description": ["desc", None],
             "emetteur": ["A", "B"],
-            "destinataire": ["X", "Y"],
+            "recepteur": ["X", "Y"],
             "type_inject": ["Info", None],
             "modalite": [None, "SMS"],
             "phase_exercice": [None, None],
