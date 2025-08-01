@@ -6,7 +6,19 @@ from typing import Dict, Iterable
 
 import pandas as pd
 
-from .mapping_utils import normalize_text
+# Import directly from the package so that `main` can be executed as a
+# standalone script without being part of a package.  Using an absolute import
+# avoids the "attempted relative import with no known parent package" error
+# when ``main`` is executed from the repository root or via the helper scripts.
+from chronogram_pipeline.src.mapping_utils import normalize_text
+from chronogram_pipeline.src.excel_parser import detect_main_sheet
+from chronogram_pipeline.src.db_utils import (
+    DEFAULT_DB,
+    create_connection,
+    init_tables,
+    insert_chronogram_metadata,
+    insert_injects,
+)
 
 
 def _norm(value: str) -> str:
@@ -403,3 +415,78 @@ def clean_data(
 
     df = standardize_and_clean(df, chrono_rank=chrono_rank)
     return df
+
+
+def run_pipeline(
+    excel_path: Path | str,
+    *,
+    config_dir: Path | None = None,
+    log_dir: Path | None = None,
+    db_path: Path | None = None,
+) -> dict:
+    """Execute the minimal chronogram processing pipeline on ``excel_path``.
+
+    This helper loads the Excel file, cleans the data using ``clean_data`` and
+    inserts the result into the SQLite database using functions from
+    ``chronogram_pipeline.src.db_utils``.  It mirrors the simplified behaviour
+    defined in the tests and is intentionally lightweight.
+
+    Parameters
+    ----------
+    excel_path : Path | str
+        Location of the Excel file to process.
+    config_dir : Path, optional
+        Unused placeholder kept for API compatibility.
+    log_dir : Path, optional
+        Directory where log files should be written.  The directory is created
+        if it does not exist.
+    db_path : Path, optional
+        SQLite database path. Defaults to ``DEFAULT_DB`` from ``db_utils``.
+
+    Returns
+    -------
+    dict
+        Mapping containing the raw ``df``, the ``clean_df`` and the generated
+        ``chrono_id``.
+    """
+
+    excel_path = Path(excel_path)
+    if not excel_path.exists():
+        raise FileNotFoundError(f"{excel_path!r} does not exist")
+    if excel_path.suffix.lower() != ".xlsx":
+        raise ValueError("Input file must be a .xlsx Excel file")
+
+    # default directories relative to this file
+    base_dir = Path(__file__).resolve().parent
+    config_dir = Path(config_dir) if config_dir else base_dir / "config"
+    log_dir = Path(log_dir) if log_dir else base_dir / "data" / "control"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    db_path = Path(db_path) if db_path else DEFAULT_DB
+
+    # Load Excel and clean
+    sheet = detect_main_sheet(excel_path)
+    df = pd.read_excel(excel_path, sheet_name=sheet)
+    clean_df = clean_data(df, chrono_rank=1)
+
+    if clean_df.empty:
+        # Ensure tables exist for the test expectations
+        with create_connection(db_path) as conn:
+            init_tables(conn)
+        raise StopIteration("No injects found")
+
+    metadata = {
+        "nom_chronogramme": "",
+        "date_exercice": "",
+        "lieu_exercice": "",
+        "etablissement_nom": "",
+        "etablissement_type": "",
+        "submitter": "",
+        "nom_fichier_excel": excel_path.name,
+        "nb_injects": len(clean_df),
+    }
+
+    chrono_id = insert_chronogram_metadata(metadata, db_path=db_path)
+    insert_injects(clean_df.assign(id_chronogramme=chrono_id), db_path=db_path)
+
+    return {"df": df, "clean_df": clean_df, "chrono_id": chrono_id}
