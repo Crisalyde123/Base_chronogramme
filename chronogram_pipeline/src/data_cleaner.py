@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable
+import csv
 
 import pandas as pd
 
@@ -14,12 +15,14 @@ from .mapping_utils import normalize_text
 def load_column_mapping(path_ref: Path) -> Dict[str, str]:
     """Return column name mapping from CSV file at ``path_ref``."""
     if not path_ref.exists():
-        pd.DataFrame(columns=["raw_name", "mapped_name"]).to_csv(path_ref, index=False)
+        pd.DataFrame(columns=["raw_name", "mapped_name"]).to_csv(
+            path_ref, index=False, quoting=csv.QUOTE_MINIMAL
+        )
         return {}
 
     df = pd.read_csv(path_ref)
     df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False)
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
     mapping: Dict[str, str] = {}
     for _, row in df.iterrows():
@@ -42,12 +45,14 @@ def load_column_mapping(path_ref: Path) -> Dict[str, str]:
 def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
     """Return per-column value mapping from CSV file at ``path_ref``."""
     if not path_ref.exists():
-        pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"]).to_csv(path_ref, index=False)
+        pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"]).to_csv(
+            path_ref, index=False, quoting=csv.QUOTE_MINIMAL
+        )
         return {}
 
     df = pd.read_csv(path_ref)
     df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False)
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
     mapping: Dict[str, Dict[str, str]] = {}
     for _, row in df.iterrows():
@@ -138,7 +143,7 @@ def _append_new_columns(path_ref: Path, columns: Iterable[str]) -> None:
             existing.add(col)
 
     df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False)
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
 
 def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
@@ -157,7 +162,7 @@ def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
                 "mapped_value": "XXX",
             }
     df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
-    df.to_csv(path_ref, index=False)
+    df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
 
 def _apply_mappings(
