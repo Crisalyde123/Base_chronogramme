@@ -26,20 +26,22 @@ def test_insert_injects_and_update_stats(tmp_path):
 
     chrono_id = insert_chronogram_metadata(metadata, db_path=db_path)
 
-    df = pd.DataFrame({
-        "id_inject": [1, 2, 3, 4, 5],
-        "horodatage": ["T0", "T1", "T2", "T3", "T4"],
-        "description": ["a", "b", "c", "d", "e"],
-        "emetteur": ["X"] * 5,
-        "recepteur": ["Y"] * 5,
-        "type_inject": ["Info"] * 5,
-        "modalite": ["Mail"] * 5,
-        "phase_exercice": ["P"] * 5,
-        "observations": [""] * 5,
-        "id_chronogramme": [chrono_id] * 5,
-        "etablissement_nom": [metadata["etablissement_nom"]] * 5,
-        "etablissement_type": [metadata["etablissement_type"]] * 5,
-    })
+    df = pd.DataFrame(
+        {
+            "id_inject": [1, 2, 3, 4, 5],
+            "horodatage": ["T0", "T1", "T2", "T3", "T4"],
+            "description": ["a", "b", "c", "d", "e"],
+            "emetteur": ["X"] * 5,
+            "recepteur": ["Y"] * 5,
+            "type_inject": ["Info"] * 5,
+            "modalite": ["Mail"] * 5,
+            "phase_exercice": ["P"] * 5,
+            "observations": [""] * 5,
+            "id_chronogramme": [chrono_id] * 5,
+            "etablissement_nom": [metadata["etablissement_nom"]] * 5,
+            "etablissement_type": [metadata["etablissement_type"]] * 5,
+        }
+    )
 
     inserted = insert_injects(df, db_path=db_path)
     assert inserted == 5

@@ -29,7 +29,7 @@ def _load_chrono_id(log_file: Path) -> int | None:
     return None
 
 
-def _compute_completeness(conn: sqlite3.Connection, chrono_id: int) -> float:
+def _compute_completeness(conn: sqlite3.Connection, chrono_id: str) -> float:
     df = pd.read_sql(
         "SELECT * FROM Injects WHERE id_chronogramme = ?",
         conn,
@@ -37,7 +37,7 @@ def _compute_completeness(conn: sqlite3.Connection, chrono_id: int) -> float:
     )
     if df.empty:
         return 0.0
-    cols = [c for c in df.columns if c not in {"id_inject_global", "id_chronogramme"}]
+    cols = [c for c in df.columns if c not in {"id_chronogramme"}]
     filled = df[cols].notna().sum().sum()
     total = len(df) * len(cols)
     return float(filled) / float(total) if total else 0.0
@@ -59,7 +59,10 @@ def generate_report() -> None:
             total = len(subset)
             auto_count = (subset["methode"] == "règle").sum()
             ia_count = (subset["methode"] == "IA").sum()
-            unresolved = subset["champ_standard"].isna().sum() + (subset["champ_standard"] == "").sum()
+            unresolved = (
+                subset["champ_standard"].isna().sum()
+                + (subset["champ_standard"] == "").sum()
+            )
             auto_rate = auto_count / total if total else 0.0
             ia_rate = ia_count / total if total else 0.0
             unresolved_rate = unresolved / total if total else 0.0

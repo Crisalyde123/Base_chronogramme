@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 def enrich_data(
     df: pd.DataFrame,
     *,
-    id_chronogramme: int,
+    id_chronogramme: str,
     etablissement_nom: str,
     etablissement_type: str,
     nom_chronogramme: str,
@@ -22,7 +22,7 @@ def enrich_data(
     ----------
     df : DataFrame
         Clean and standardised table of injects.
-    id_chronogramme : int
+    id_chronogramme : str
         Identifier of the parent chronogram.
     etablissement_nom : str
         Establishment name.
@@ -49,7 +49,7 @@ def enrich_data(
 
     # sequential numbering and unique inject identifier
     data["numero"] = list(range(1, len(data) + 1))
-    data["id_inject"] = [f"C{id_chronogramme:03d}_L{num:03d}" for num in data["numero"]]
+    data["id_inject"] = [f"{id_chronogramme}_L{num:03d}" for num in data["numero"]]
     logger.info("numero generated", extra={"event": "AUTO_NUM"})
 
     data["nb_injects"] = len(data)

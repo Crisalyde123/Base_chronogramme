@@ -9,7 +9,12 @@ from src.standardizer import standardize_column_values
 
 
 def test_standardize_column_values(tmp_path):
-    df = pd.DataFrame({"type_inject": ["Majeur", "Critique", "Élevé"], "modalite": ["SMS", "Courriel", "SMS"]})
+    df = pd.DataFrame(
+        {
+            "type_inject": ["Majeur", "Critique", "Élevé"],
+            "modalite": ["SMS", "Courriel", "SMS"],
+        }
+    )
 
     value_yaml = tmp_path / "value_mappings.yaml"
     value_yaml.write_text(
@@ -51,7 +56,7 @@ fields:
         gpt_suggest_value=fake_gpt,
         file_name="testfile",
         log_xlsx=log_file,
-        id_chronogramme=5,
+        id_chronogramme="C005",
     )
 
     assert list(out["type_inject"]) == ["Critique", "Critique", "Important"]
@@ -64,5 +69,4 @@ fields:
     assert data["type_inject"]["eleve"] == "Important"
 
     log_df = pd.read_excel(log_file)
-    assert set(log_df["id_chronogramme"]) == {5}
-
+    assert set(log_df["id_chronogramme"]) == {"C005"}

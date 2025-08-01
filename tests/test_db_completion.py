@@ -47,9 +47,7 @@ def test_chronogram_completion(tmp_path):
     insert_chronogram_metadata(metadata, db_path=db_path)
 
     with sqlite3.connect(db_path) as conn:
-        _, failures = _completion_for_table(
-            conn, "Chronogrammes", {"id_chronogramme"}
-        )
+        _, failures = _completion_for_table(conn, "Chronogrammes", {"id_chronogramme"})
     assert not failures, f"Incomplete chronogram rows: {failures}"
 
 
@@ -88,6 +86,6 @@ def test_injects_completion(tmp_path):
         _, failures = _completion_for_table(
             conn,
             "Injects",
-            {"id_inject_global", "id_chronogramme", "id_inject"},
+            {"id_chronogramme", "id_inject"},
         )
     assert not failures, f"Incomplete inject rows: {failures}"

@@ -20,7 +20,7 @@ def test_insert_chronogram_metadata(tmp_path):
         "nb_injects": 5,
     }
     chrono_id = insert_chronogram_metadata(metadata, db_path=db_path)
-    assert isinstance(chrono_id, int)
+    assert isinstance(chrono_id, str)
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(

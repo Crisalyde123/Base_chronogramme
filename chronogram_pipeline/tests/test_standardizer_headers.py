@@ -13,7 +13,9 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
     mapping_csv.write_text("En-tête original,En-tête standard\nDescriptif,Contenu\n")
 
     schema_yaml = tmp_path / "schema.yaml"
-    schema_yaml.write_text("fields:\n  - name: Contenu\n  - name: Recepteur\n  - name: Modalité\n")
+    schema_yaml.write_text(
+        "fields:\n  - name: Contenu\n  - name: Recepteur\n  - name: Modalité\n"
+    )
 
     prompts_dir = tmp_path / "prompts"
 
@@ -34,7 +36,7 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
         gpt_suggest_header=fake_gpt,
         file_name="testfile",
         log_xlsx=log_xlsx,
-        id_chronogramme=10,
+        id_chronogramme="C010",
     )
 
     assert out == ["Contenu", "Recepteur"]
@@ -45,4 +47,4 @@ def test_standardize_headers_uses_dictionary_first(tmp_path):
     # prompt saved
     assert (prompts_dir / "testfile_header_Destinataires.txt").exists()
     log_df = pd.read_excel(log_xlsx)
-    assert set(log_df["id_chronogramme"]) == {10}
+    assert set(log_df["id_chronogramme"]) == {"C010"}

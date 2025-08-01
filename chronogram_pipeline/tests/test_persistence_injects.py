@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import sqlite3
@@ -31,7 +32,7 @@ def test_insert_two_injects_in_db(tmp_path):
 
     # Prepare DataFrame for DB insertion
     df_db = df_clean.head(2).copy()
-    chrono_id = 99
+    chrono_id = "C099"
     df_db["id_chronogramme"] = chrono_id
     df_db["description"] = df_db["resume"]
     df_db["modalite"] = df_db["nature"]
@@ -47,7 +48,10 @@ def test_insert_two_injects_in_db(tmp_path):
     injects_db = db_dir / "injects.db"
     init_databases(chrono_db, injects_db)
     with sqlite3.connect(injects_db) as conn:
-        conn.execute("INSERT INTO Chronogrammes (id_chronogramme, nom_chronogramme) VALUES (?, ?)", (chrono_id, "Test"))
+        conn.execute(
+            "INSERT INTO Chronogrammes (id_chronogramme, nom_chronogramme) VALUES (?, ?)",
+            (chrono_id, "Test"),
+        )
         conn.commit()
 
     inserted = insert_injects(df_db, db_path=injects_db)
@@ -78,4 +82,3 @@ def test_insert_two_injects_in_db(tmp_path):
             "etablissement_type",
         ]:
             assert row[col] == df_db.iloc[i][col]
-

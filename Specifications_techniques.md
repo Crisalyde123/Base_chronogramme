@@ -676,8 +676,8 @@ Cette table contient une **ligne par exercice de crise** (chronogramme)
 intégré. Elle regroupe les informations générales issues du formulaire
 ainsi que quelques champs d'administration. Schéma proposé :
 
--   **id_chronogramme** -- *INTEGER, PRIMARY KEY* (auto-incrément en
-    SQLite). Identifiant unique du chronogramme/exercice. Sera utilisé
+-   **id_chronogramme** -- *TEXT, PRIMARY KEY*. Identifiant unique du
+    chronogramme/exercice (ex. `C001`). Sera utilisé
     comme référence étrangère dans la table des injects.
 -   **nom_chronogramme** -- *TEXT, NOT NULL*. Nom ou titre de l'exercice
     de crise. Par exemple *« Exercice Inondation Paris 2023 »*.
@@ -739,11 +739,7 @@ chronogrammes intégrés, avec leurs attributs standardisés. Chaque ligne
 correspond à un événement simulé dans un exercice. Schéma générique (à
 adapter selon les champs observés dans les chronogrammes) :
 
--   **id_inject_global** -- *INTEGER, PRIMARY KEY*. Identifiant
-    technique unique de l'inject au niveau global (peut être
-    auto-incrémental indépendamment de l'exercice, ou calculé). Ce champ
-    sert de surrogate key purement interne.
--   **id_chronogramme** -- *INTEGER, FOREIGN KEY*, **NOT NULL**.
+-   **id_chronogramme** -- *TEXT, PRIMARY KEY*, **NOT NULL**.
     Référence vers l'exercice parent (l'ID dans la table Chronogrammes).
     Assure le lien de chaque inject à son chronogramme. Idéalement, une
     contrainte FOREIGN KEY (bien que SQLite ne les enforce que si
@@ -813,10 +809,9 @@ présentes dans tous les chronogrammes. L'objectif est d'avoir un schéma
 injects. Toute colonne non reconnue dans un fichier sera ignorée à
 l'intégration (sauf si on décide d'étendre le schéma pour l'inclure).
 
-**Contraintes** : La clé primaire est `id_inject_global`. On définit en
-outre une **clé étrangère** `id_chronogramme` référant
+**Contraintes** : On définit une **clé étrangère** `id_chronogramme` référant
 `Chronogrammes(id_chronogramme)` pour garantir l'intégrité référentielle
-(SQLite le permet). On met en place une **clé unique composite** sur
+(SQLite le permet). Une **clé unique composite** est mise sur
 (`id_chronogramme`, `id_inject`) afin d'éviter d'insérer deux fois le
 même inject du même exercice, et pouvoir repérer d'éventuels doublons.
 Cela signifie qu'on ne pourra pas avoir deux lignes avec le même numéro
