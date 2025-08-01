@@ -18,10 +18,24 @@ def _norm(value: str) -> str:
     return normalize_text(value).replace(" ", "")
 
 
-def load_column_mapping(path_ref: Path) -> Dict[str, str]:
-    """Return column name mapping from CSV file at ``path_ref``."""
+def _log_history(path: Path, rows: list[Dict[str, str]]) -> None:
+    """Append mapping history rows to ``path``."""
+    if not rows:
+        return
+    if path.exists():
+        df = pd.read_csv(path)
+    else:
+        df = pd.DataFrame(
+            columns=["timestamp", "chronogramme", "category", "column", "raw", "mapped"]
+        )
+    for row in rows:
+        df.loc[len(df)] = row
+    df.to_csv(path, index=False, quoting=csv.QUOTE_MINIMAL)
+
+
+def load_column_mapping(path_ref: Path, history_file: Path | None = None) -> Dict[str, str]:
+    """Return column name mapping from CSV file at ``path_ref`` and purge applied lines."""
     if not path_ref.exists():
-        # Create an empty mapping file with header, ready for manual mapping
         pd.DataFrame(
             columns=["raw_name", "mapped_name", "nom_chronogramme"]
         ).to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
@@ -41,7 +55,7 @@ def load_column_mapping(path_ref: Path) -> Dict[str, str]:
     # Persist cleaned mapping back to CSV
     df.to_csv(path_ref, index=False, quoting=csv.QUOTE_MINIMAL)
 
-    # Build mapping dict: norm(raw_name) -> mapped_name or __DROP__
+    # Build mapping dict: norm(raw_name) -> mapped_name or "__DROP__" semantics if needed downstream
     mapping: Dict[str, str] = {}
     for _, row in df.iterrows():
         raw = str(row.get("raw_name", ""))
@@ -56,8 +70,8 @@ def load_column_mapping(path_ref: Path) -> Dict[str, str]:
     return mapping
 
 
-def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
-    """Return per-column value mapping from CSV file at ``path_ref``."""
+def load_value_mapping(path_ref: Path, history_file: Path | None = None) -> Dict[str, Dict[str, str]]:
+    """Return per-column value mapping from CSV and purge applied lines."""
     if not path_ref.exists():
         pd.DataFrame(
             columns=["column_name", "raw_value", "mapped_value", "nom_chronogramme"]
@@ -69,7 +83,7 @@ def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
     if "nom_chronogramme" not in df.columns:
         df["nom_chronogramme"] = ""
 
-    # Normalize and dedupe per column
+    # Normalize and dedupe per column/value pair
     df["norm_col"] = df["column_name"].astype(str).map(_norm)
     df["norm_val"] = df["raw_value"].astype(str).map(_norm)
     df.sort_values(by=["norm_col", "norm_val"], inplace=True)
@@ -90,6 +104,60 @@ def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
 
     logger.debug("Loaded value mapping for %d columns from %s", len(mapping), path_ref)
     return mapping
+
+
+def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
+    """Propagate merged cell values vertically and horizontally."""
+    result = df.copy()
+
+    # Forward-fill downwards first to handle vertical merges
+    result = result.ffill()
+
+    if isinstance(result, pd.Series):
+        result = result.to_frame().T
+
+    # Propagate values horizontally (left -> right)
+    result = result.ffill(axis=1)
+    return result
+
+
+def drop_empty_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove rows that are completely empty or contain only blanks."""
+    df = df.copy()
+    df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
+    df.dropna(axis=0, how="all", inplace=True)
+    return df
+
+
+def drop_empty_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove columns that contain no data below the header row."""
+    df = df.copy()
+    df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
+    data = df.iloc[1:] if len(df) > 1 else df
+    empty = [col for col in df.columns if data[col].isna().all()]
+    df.drop(columns=empty, inplace=True)
+    return df
+
+
+def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows like 'TOTAL' or 'Phase X' that do not contain data."""
+    df = df.copy()
+    keywords = ("total", "phase")
+
+    def is_parasitic(row) -> bool:
+        cells = [
+            str(c).strip().lower()
+            for c in row
+            if not pd.isna(c) and str(c).strip() != ""
+        ]
+        if len(cells) == 1:
+            val = cells[0]
+            return any(val.startswith(k) for k in keywords)
+        return False
+
+    mask = df.apply(is_parasitic, axis=1)
+    df = df[~mask]
+    return df
 
 
 def _append_new_columns(path_ref: Path, columns: Iterable[str], chrono_name: str | None = None) -> None:
@@ -190,6 +258,7 @@ def _apply_mappings(
         mapped = column_map.get(_norm(col))
         if mapped == "__DROP__":
             drop_cols.append(col)
+            # history logging could be added here if needed
         else:
             rename[col] = mapped
 
@@ -203,17 +272,18 @@ def _apply_mappings(
         mapping = value_map.get(_norm(col))
         if not mapping:
             continue
+
         new_vals: list[str] = []
 
-        def convert(val):
+        def convert(val: object) -> object:
             if pd.isna(val) or str(val).strip() == "":
                 return pd.NA
             raw = str(val)
-            norm_val = _norm(raw)
-            if norm_val not in mapping:
+            norm_raw = _norm(raw)
+            if norm_raw not in mapping:
                 new_vals.append(raw)
                 return pd.NA
-            mapped_val = mapping[norm_val]
+            mapped_val = mapping[norm_raw]
             return pd.NA if mapped_val == "" else mapped_val
 
         df[col] = df[col].map(convert)
@@ -223,4 +293,164 @@ def _apply_mappings(
             logger.warning("Unknown values for column '%s' appended for manual mapping: %s", col, new_vals)
             raise StopIteration("Nouvelles valeurs à mapper")
 
+    return df
+
+
+def _validate_values(df: pd.DataFrame) -> None:
+    """Normalize and validate values for specific columns."""
+    allowed = {
+        "phase": {"1": "1", "2": "2", "3": "3", "4": "4"},
+        "statut": {"joue": "joué", "annule": "annulé", "a jouer": "à jouer"},
+        "type": {"structurant": "structurant", "saturant": "saturant"},
+        "nature": {
+            "mail": "mail",
+            "appel": "appel",
+            "sms": "SMS",
+            "video": "vidéo",
+            "weezer": "Weezer",
+            "oral": "oral",
+        },
+    }
+
+    for col, mapping in allowed.items():
+        if col not in df.columns:
+            continue
+
+        def convert(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            key = normalize_text(val)
+            return mapping.get(key, pd.NA)
+
+        df[col] = df[col].map(convert)
+
+    if "horodatage" in df.columns:
+        def parse_ts(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            ts = pd.to_datetime(str(val), dayfirst=True, errors="coerce")
+            if pd.isna(ts):
+                return pd.NA
+            return ts.strftime("%Y-%m-%dT%H:%M:%S")
+
+        df["horodatage"] = df["horodatage"].map(parse_ts)
+
+
+def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Remove rows where the same value appears in >=6 columns."""
+    def is_repeat(row: pd.Series) -> bool:
+        values = [
+            str(row[c]).strip()
+            for c in cols
+            if c in row.index and pd.notna(row[c]) and str(row[c]).strip() != ""
+        ]
+        if not values:
+            return False
+        counts = {}
+        for v in values:
+            counts[v] = counts.get(v, 0) + 1
+        return max(counts.values()) >= 6
+
+    mask = df.apply(is_repeat, axis=1)
+    cleaned = df.loc[~mask].reset_index(drop=True)
+    if cleaned.empty and not df.empty:
+        return df.reset_index(drop=True)
+    return cleaned
+
+
+def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
+    """Standardize columns and add identifier columns."""
+    mapping = {
+        "phase": "phase",
+        "statut inject": "statut",
+        "statut": "statut",
+        "type": "type",
+        "horodatage": "horodatage",
+        "emetteur": "emetteur",
+        "emmeteur": "emetteur",
+        "destinataire": "recepteur",
+        "recepteur": "recepteur",
+        "nature": "nature",
+        "descriptif": "resume",
+        "description": "resume",
+        "resume": "resume",
+        "corps": "contenu",
+        "contenu": "contenu",
+        "actions attendues": "actions_attendues",
+        "reactions attendues": "actions_attendues",
+        "commentaires": "commentaires",
+        "observations": "commentaires",
+    }
+
+    std_cols = [
+        "phase",
+        "statut",
+        "type",
+        "horodatage",
+        "emetteur",
+        "recepteur",
+        "nature",
+        "resume",
+        "contenu",
+        "actions_attendues",
+        "commentaires",
+    ]
+
+    rename = {}
+    for col in list(df.columns):
+        norm = normalize_text(col)
+        if norm in mapping:
+            rename[col] = mapping[norm]
+
+    data = df.rename(columns=rename)
+    for col in std_cols:
+        if col not in data.columns:
+            data[col] = pd.NA
+
+    data = _drop_repeated_rows(data, std_cols)
+    _validate_values(data)
+
+    chrono_id = f"C{chrono_rank:03d}"
+    numeros = [f"L{i:03d}" for i in range(1, len(data) + 1)]
+    data.insert(0, "id_chronogramme", chrono_id)
+    data.insert(1, "numero", numeros)
+    data.insert(2, "id_inject", [f"{chrono_id}_{n}" for n in numeros])
+    data.replace({pd.NA: None}, inplace=True)
+
+    return data
+
+
+def clean_data(
+    df: pd.DataFrame,
+    *,
+    chrono_rank: int = 1,
+    column_map: Dict[str, str] | None = None,
+    value_map: Dict[str, Dict[str, str]] | None = None,
+    columns_file: Path | None = None,
+    values_file: Path | None = None,
+    chrono_name: str | None = None,
+    history_file: Path | None = None,
+) -> pd.DataFrame:
+    """Return ``df`` cleaned, optionally using manual mappings."""
+    df = unmerge_cells(df)
+    df = drop_empty_rows(df)
+    df = drop_empty_cols(df)
+    df = remove_parasitic_rows(df)
+    df.reset_index(drop=True, inplace=True)
+
+    if (
+        column_map is not None
+        and columns_file is not None
+        and values_file is not None
+    ):
+        df = _apply_mappings(
+            df,
+            column_map,
+            value_map or {},
+            columns_file=columns_file,
+            values_file=values_file,
+            chrono_name=chrono_name,
+        )
+
+    df = standardize_and_clean(df, chrono_rank=chrono_rank)
     return df

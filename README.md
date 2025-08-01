@@ -49,8 +49,8 @@ Les ajouts automatiques appliquent une normalisation (minuscules sans espaces) e
 la suppression des doublons pour faciliter la complétion manuelle.
 
 
-Après mise à jour de `colonnes_ref.csv` ou `valeurs_ref.csv`, relancez le
-pipeline pour reprendre le traitement.
+Après avoir complété `colonnes.csv` ou `valeurs.csv`, relancez le pipeline pour
+reprendre le traitement.
 
 ## Journaux d'exécution
 

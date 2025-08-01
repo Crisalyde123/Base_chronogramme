@@ -106,7 +106,7 @@ def test_load_mapping_and_clean(tmp_path):
     col_file = tmp_path / "colonnes.csv"
     val_file = tmp_path / "valeurs.csv"
     _create_column_file(col_file, [("A", "alpha", "c1"), ("B", "", "c1")])
-    _create_value_file(val_file, [("alpha", "x", "X", "c1")])
+    _create_value_file(val_file, [("alpha", "x", "Y", "c1")])
 
     col_map = load_column_mapping(col_file)
     val_map = load_value_mapping(val_file)
@@ -119,11 +119,12 @@ def test_load_mapping_and_clean(tmp_path):
         value_map=val_map,
         columns_file=col_file,
         values_file=val_file,
+        chrono_name="c1",
     )
 
     assert "alpha" in out.columns
     assert "B" not in out.columns
-    assert out["alpha"].iloc[0] == "X"
+    assert out["alpha"].iloc[0] == "Y"
 
 
 def test_clean_data_new_column(tmp_path):

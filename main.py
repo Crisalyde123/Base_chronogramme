@@ -82,9 +82,6 @@ def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
     # Forward-fill downwards first to handle vertical merges
     result = result.ffill()
 
-    # ``result`` might be a Series if ``df`` was not a DataFrame.  ``Series``
-    # does not support ``ffill`` with ``axis`` so convert it to a single-row
-    # DataFrame before applying the horizontal fill.
     if isinstance(result, pd.Series):
         result = result.to_frame().T
 
@@ -117,7 +114,6 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     keywords = ("total", "phase")
 
     def is_parasitic(row) -> bool:
-        """Return ``True`` if ``row`` looks like a summary row."""
         cells = [
             str(c).strip().lower()
             for c in row
@@ -216,7 +212,7 @@ def _apply_mappings(
         raise StopIteration("Nouveau nom de colonne à mapper")
 
     rename: Dict[str, str] = {}
-    drop_cols = []
+    drop_cols: list[str] = []
     for col in df.columns:
         mapped = column_map.get(_norm(col))
         if mapped == "__DROP__":
@@ -256,7 +252,6 @@ def _apply_mappings(
 
 def _validate_values(df: pd.DataFrame) -> None:
     """Normalize and validate values for specific columns."""
-
     allowed = {
         "phase": {"1": "1", "2": "2", "3": "3", "4": "4"},
         "statut": {"joue": "joué", "annule": "annulé", "a jouer": "à jouer"},
@@ -297,7 +292,6 @@ def _validate_values(df: pd.DataFrame) -> None:
 
 def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """Remove rows where the same value appears in >=6 columns."""
-
     def is_repeat(row: pd.Series) -> bool:
         values = [
             str(row[c]).strip()
@@ -320,7 +314,6 @@ def _drop_repeated_rows(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
     """Standardize columns and add identifier columns."""
-
     mapping = {
         "phase": "phase",
         "statut inject": "statut",
