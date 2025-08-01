@@ -16,10 +16,20 @@ def test_standardize_headers_rules(tmp_path):
     log_xlsx = tmp_path / "log.xlsx"
     headers = ["Descriptif", "destinataires", "Inconnu"]
 
-    out = standardize_headers_rules(headers, mapping_csv=mapping_csv, log_xlsx=log_xlsx)
+    out = standardize_headers_rules(
+        headers, mapping_csv=mapping_csv, log_xlsx=log_xlsx, id_chronogramme=42
+    )
 
     assert out == ["Contenu", "Destinataire", ""]
 
     df = pd.read_excel(log_xlsx)
+    assert list(df.columns) == [
+        "id_chronogramme",
+        "nom_original",
+        "champ_standard",
+        "methode",
+        "horodatage",
+    ]
     assert df.shape[0] == 3
-    assert (df["Méthode"] == "règle").all()
+    assert set(df["id_chronogramme"]) == {42}
+    assert (df["methode"] == "règle").all()

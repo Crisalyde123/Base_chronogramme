@@ -13,6 +13,7 @@ def _build_formatter():
 
         class CustomJsonFormatter(jsonlogger.JsonFormatter):
             def add_fields(self, log_record, record, message_dict):
+                """Attach extra fields and clean defaults for JSON output."""
                 super().add_fields(log_record, record, message_dict)
                 # Rename default fields
                 log_record['timestamp'] = log_record.pop('asctime')
@@ -29,6 +30,7 @@ def _build_formatter():
 
         class SimpleJsonFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
+                """Serialize ``record`` into a minimal JSON string."""
                 data = {
                     'timestamp': datetime.utcfromtimestamp(record.created).strftime('%Y-%m-%dT%H:%M:%S'),
                     'level': record.levelname,

@@ -2,10 +2,13 @@ import sys
 from pathlib import Path
 import sqlite3
 
-# allow imports from project root
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# allow imports from project root and package
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "chronogram_pipeline"))
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.db_utils import init_databases
+from chronogram_pipeline.src import init_db
 
 
 def table_exists(db_path: Path, table: str) -> bool:
@@ -26,3 +29,12 @@ def test_init_databases_creates_tables(tmp_path):
     assert injects_db.exists()
     assert table_exists(chrono_db, "Chronogrammes")
     assert table_exists(injects_db, "Injects")
+
+
+def test_init_db_main_creates_files(tmp_path, monkeypatch):
+    out_dir = tmp_path / "databases"
+    monkeypatch.setenv("OUTPUT_DB_PATH", str(out_dir))
+    init_db.main()
+    files = {f.name for f in out_dir.glob("*.db")}
+    assert "chronogrammes.db" in files
+    assert "injects.db" in files
