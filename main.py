@@ -141,6 +141,29 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def load_metadata_table(path_ref: Path) -> Dict[str, Dict[str, str]]:
+    """Return metadata keyed by file name from CSV at ``path_ref``."""
+    if not path_ref.exists():
+        return {}
+    df = pd.read_csv(path_ref, dtype=str)
+    df.fillna("", inplace=True)
+    records: Dict[str, Dict[str, str]] = {}
+    for _, row in df.iterrows():
+        file_name = str(row.get("nom_fichier", ""))
+        if not file_name:
+            continue
+        rec = {
+            "nom_chronogramme": row.get("nom_chronogramme", ""),
+            "date_exercice": row.get("date_exercice", ""),
+            "lieu_exercice": row.get("lieu_exercice", ""),
+            "etablissement_nom": row.get("etablissement_nom", ""),
+            "etablissement_type": row.get("etablissement_type", ""),
+            "submitter": row.get("submitter", ""),
+        }
+        records[file_name] = rec
+    return records
+
+
 def _append_new_columns(path_ref: Path, columns: Iterable[str], chrono_name: str | None = None) -> None:
     """Append unknown column names to ``path_ref`` CSV with empty mapping."""
     if path_ref.exists():
@@ -423,6 +446,7 @@ def run_pipeline(
     config_dir: Path | None = None,
     log_dir: Path | None = None,
     db_path: Path | None = None,
+    metadata_csv: Path | None = None,
 ) -> dict:
     """Execute the minimal chronogram processing pipeline on ``excel_path``.
 
@@ -442,6 +466,8 @@ def run_pipeline(
         if it does not exist.
     db_path : Path, optional
         SQLite database path. Defaults to ``DEFAULT_DB`` from ``db_utils``.
+    metadata_csv : Path, optional
+        CSV file containing metadata for input Excel files.
 
     Returns
     -------
@@ -475,16 +501,17 @@ def run_pipeline(
             init_tables(conn)
         raise StopIteration("No injects found")
 
-    metadata = {
-        "nom_chronogramme": "",
-        "date_exercice": "",
-        "lieu_exercice": "",
-        "etablissement_nom": "",
-        "etablissement_type": "",
-        "submitter": "",
+    metadata_csv = Path(metadata_csv) if metadata_csv else base_dir / "metadata.csv"
+    metadata_table = load_metadata_table(metadata_csv)
+
+    if excel_path.name not in metadata_table:
+        raise ValueError(f"Metadata for {excel_path.name} not found in {metadata_csv}")
+
+    metadata = metadata_table[excel_path.name].copy()
+    metadata.update({
         "nom_fichier_excel": excel_path.name,
         "nb_injects": len(clean_df),
-    }
+    })
 
     chrono_id = insert_chronogram_metadata(metadata, db_path=db_path)
     insert_injects(clean_df.assign(id_chronogramme=chrono_id), db_path=db_path)
