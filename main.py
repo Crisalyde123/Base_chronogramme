@@ -137,7 +137,7 @@ def run_pipeline(
         m["rows"] = len(df_raw)
 
     with plog.step("CLEAN_DATA") as m:
-        df_clean = data_cleaner.clean_data(df_raw)
+        df_clean = data_cleaner.clean_data(df_raw, chrono_rank=chrono_id)
         m["rows"] = len(df_clean)
 
     with plog.step("STANDARDIZE_HEADERS"):

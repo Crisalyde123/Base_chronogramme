@@ -18,6 +18,7 @@ from .standardizer import (
 )
 from .data_cleaner import (
     clean_data,
+    standardize_and_clean,
     drop_empty_cols,
     drop_empty_rows,
     remove_parasitic_rows,
@@ -38,6 +39,7 @@ __all__ = [
     "standardize_headers_rules",
     "standardize_column_values",
     "standardize_values",
+    "standardize_and_clean",
     "unmerge_cells",
     "drop_empty_rows",
     "drop_empty_cols",
