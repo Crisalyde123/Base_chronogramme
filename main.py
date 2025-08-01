@@ -123,50 +123,65 @@ def run_pipeline(
         chrono_id = db_utils.insert_chronogram_metadata(meta_rec, db_path=db_path)
         m["chrono_id"] = chrono_id
 
-    with plog.step("DETECT_SHEET"):
-        sheet_name = excel_parser.detect_main_sheet(xlsx_file)
+    try:
+        with plog.step("DETECT_SHEET"):
+            sheet_name = excel_parser.detect_main_sheet(xlsx_file)
 
-    with plog.step("EXTRACT_RANGE") as m:
-        wb = openpyxl.load_workbook(xlsx_file, data_only=True)
-        sheet = wb[sheet_name]
-        header_row, first_col, last_col = mapping_utils.find_data_table(sheet)
-        df_raw = pd.read_excel(
-            xlsx_file,
-            sheet_name=sheet_name,
-            header=header_row - 1,
-            usecols=range(first_col - 1, last_col),
-        )
-        m["rows"] = len(df_raw)
+        with plog.step("EXTRACT_RANGE") as m:
+            wb = openpyxl.load_workbook(xlsx_file, data_only=True)
+            sheet = wb[sheet_name]
+            header_row, first_col, last_col = mapping_utils.find_data_table(sheet)
+            df_raw = pd.read_excel(
+                xlsx_file,
+                sheet_name=sheet_name,
+                header=header_row - 1,
+                usecols=range(first_col - 1, last_col),
+            )
+            m["rows"] = len(df_raw)
 
-    with plog.step("CLEAN_DATA") as m:
-        df_clean = data_cleaner.clean_data(
-            df_raw,
-            chrono_rank=chrono_id,
-            column_map=column_map,
-            value_map=value_map,
-            columns_file=columns_ref,
-            values_file=values_ref,
-        )
-        m["rows"] = len(df_clean)
+        with plog.step("CLEAN_DATA") as m:
+            df_clean = data_cleaner.clean_data(
+                df_raw,
+                chrono_rank=chrono_id,
+                column_map=column_map,
+                value_map=value_map,
+                columns_file=columns_ref,
+                values_file=values_ref,
+            )
+            m["rows"] = len(df_clean)
 
-    with plog.step("APPLY_SCHEMA"):
-        df_std = apply_schema_columns(df_clean, schema_yaml)
+        with plog.step("APPLY_SCHEMA"):
+            df_std = apply_schema_columns(df_clean, schema_yaml)
 
-    with plog.step("ENRICH_DATA") as m:
-        df_enriched = enrich_data(
-            df_std,
-            id_chronogramme=chrono_id,
-            etablissement_nom=metadata["etablissement_nom"],
-            etablissement_type=metadata["etablissement_type"],
-            nom_chronogramme=metadata["nom_chronogramme"],
-            date_exercice=metadata["date_exercice"],
-        )
-        m["rows"] = len(df_enriched)
+        with plog.step("ENRICH_DATA") as m:
+            df_enriched = enrich_data(
+                df_std,
+                id_chronogramme=chrono_id,
+                etablissement_nom=metadata["etablissement_nom"],
+                etablissement_type=metadata["etablissement_type"],
+                nom_chronogramme=metadata["nom_chronogramme"],
+                date_exercice=metadata["date_exercice"],
+            )
+            m["rows"] = len(df_enriched)
 
-    with plog.step("INSERT_INJECTS") as m:
-        inserted = db_utils.insert_injects(df_enriched, db_path=db_path)
-        db_utils.update_chronogram_stats(chrono_id, df_enriched, db_path=db_path)
-        m["inserted"] = inserted
+        with plog.step("INSERT_INJECTS") as m:
+            inserted = db_utils.insert_injects(df_enriched, db_path=db_path)
+            m["inserted"] = inserted
+            if inserted > 0:
+                db_utils.update_chronogram_stats(
+                    chrono_id, df_enriched, db_path=db_path
+                )
+            else:
+                db_utils.delete_chronogram(chrono_id, db_path=db_path)
+                plog.logger.warning(
+                    "Chronogramme %s rejet\u00e9: aucun inject", xlsx_file.name,
+                    extra={"event": "CHRONO_REJECT", "file": xlsx_file.name},
+                )
+                raise StopIteration("Aucun inject ins\u00e9r\u00e9")
+
+    except Exception:
+        db_utils.delete_chronogram(chrono_id, db_path=db_path)
+        raise
 
     plog.summary()
 

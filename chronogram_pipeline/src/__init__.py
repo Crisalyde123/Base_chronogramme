@@ -2,6 +2,7 @@ from .db_utils import (
     create_connection,
     init_databases,
     insert_chronogram_metadata,
+    delete_chronogram,
     archive_file,
 )
 from .mapping_utils import (
@@ -47,6 +48,7 @@ __all__ = [
     "clean_data",
     "PipelineLogger",
     "insert_chronogram_metadata",
+    "delete_chronogram",
     "archive_file",
     "enrich_data",
     "apply_schema_columns",
