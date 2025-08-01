@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Dict
 
+from pandas.errors import EmptyDataError
+
 import pandas as pd
 
 from .logger import get_logger
@@ -25,7 +27,11 @@ def csv_to_dict(csv_path: Path) -> Dict[str, str]:
         Dictionnaire ``{cle: valeur}`` généré à partir des colonnes du fichier.
     """
     logger.debug("Reading CSV corrections from %s", csv_path)
-    df = pd.read_csv(csv_path, header=None)
+    try:
+        df = pd.read_csv(csv_path, header=None)
+    except EmptyDataError:
+        logger.warning("Empty or invalid CSV file %s", csv_path)
+        return {}
     if df.empty or df.shape[1] < 2:
         logger.warning("Empty or invalid CSV file %s", csv_path)
         return {}
