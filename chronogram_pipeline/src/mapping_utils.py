@@ -152,13 +152,53 @@ def detect_main_sheet_openpyxl(workbook_path: Path) -> openpyxl.worksheet.worksh
 
 def find_data_table(sheet: openpyxl.worksheet.worksheet.Worksheet) -> Tuple[int, int, int]:
     """Return header row index and start/end columns of the data table."""
+
+    keywords = {
+        "emetteur",
+        "destinataire",
+        "recepteur",
+        "modalite",
+        "type",
+        "nature",
+        "horodatage",
+        "descriptif",
+        "contenu",
+        "corps",
+        "statut",
+        "phase",
+        "heure",
+        "horaire",
+        "id",
+    }
+
+    def match_keywords(values: Iterable[str]) -> int:
+        norm_values = [normalize_text(v) for v in values]
+        return sum(any(k in val for val in norm_values) for k in keywords)
+
+    # first look for a row containing several known header keywords
+    for idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+        values = [cell for cell in row if cell not in (None, "")]
+        if len(values) < 3:
+            continue
+        if match_keywords([str(v) for v in values]) >= 2:
+            first_col = next(i for i, c in enumerate(row, start=1) if c not in (None, ""))
+            last_col = len(row) - next(
+                i for i, c in enumerate(reversed(row), start=1) if c not in (None, "")
+            ) + 1
+            logger.info("Header row detected at line %d", idx)
+            return idx, first_col, last_col
+
+    # fallback to the first row with at least 3 non-empty cells
     for idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
         values = [cell for cell in row if cell not in (None, "")]
         if len(values) >= 3:
             first_col = next(i for i, c in enumerate(row, start=1) if c not in (None, ""))
-            last_col = len(row) - next(i for i, c in enumerate(reversed(row), start=1) if c not in (None, "")) + 1
+            last_col = len(row) - next(
+                i for i, c in enumerate(reversed(row), start=1) if c not in (None, "")
+            ) + 1
             logger.info("Header row detected at line %d", idx)
             return idx, first_col, last_col
+
     raise ValueError("No header row found")
 
 
