@@ -86,3 +86,42 @@ def test_standardize_and_clean_invalid_value():
     out = standardize_and_clean(df)
     assert pd.isna(out["statut"].iloc[0])
 
+
+def test_no_total_line_loss():
+    columns = [
+        "phase",
+        "statut",
+        "type",
+        "horodatage",
+        "emetteur",
+        "recepteur",
+        "nature",
+        "resume",
+        "contenu",
+        "actions_attendues",
+        "commentaires",
+    ]
+
+    df = pd.DataFrame(
+        [
+            ["Texte"] * len(columns),
+            [
+                1,
+                "joué",
+                "structurant",
+                "21/02/2024",
+                "A",
+                "B",
+                "mail",
+                "r",
+                "c",
+                "a",
+                "",
+            ],
+        ],
+        columns=columns,
+    )
+
+    out = clean_data(df)
+    assert not out.empty
+
