@@ -32,6 +32,21 @@ Pour les opérations de standardisation pilotées par l'IA, renseignez les clefs
 dans les variables d'environnement `OPENAI_API_KEY` ou `MISTRAL_API_KEY` selon
 le service utilisé.
 
+## Mapping manuel
+
+Le dossier `mapping/` contient les références utilisées par le pipeline :
+
+- `colonnes_ref.csv` : fichier à deux colonnes `raw_name` et `mapped_name`. Les
+- nouvelles colonnes détectées sont ajoutées avec `mapped_name` à `XXX`.
+- `valeurs_ref.csv` : fichier à trois colonnes `column_name`, `raw_value` et
+  `mapped_value`. Les nouvelles valeurs sont ajoutées avec `mapped_value` à
+  `XXX`.
+- `colonnes_standardisees.csv` : liste des noms de colonnes cibles possibles.
+- `valeurs_standardisees.csv` : valeurs autorisées pour certaines colonnes.
+
+Après mise à jour de `colonnes_ref.csv` ou `valeurs_ref.csv`, relancez le
+pipeline pour reprendre le traitement.
+
 ## Journaux d'exécution
 
 Chaque lancement du pipeline crée un fichier `run_<horodatage>.log` dans `chronogram_pipeline/data/control/`. Ces journaux sont au format JSON et contiennent les messages techniques ainsi que les métriques de chaque étape du traitement. Ils permettent de tracer précisément les actions réalisées, notamment les appels à l'IA lors de la standardisation des en‑têtes.

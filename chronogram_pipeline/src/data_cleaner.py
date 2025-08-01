@@ -3,9 +3,67 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable
+
 import pandas as pd
 
 from .mapping_utils import normalize_text
+
+
+def load_column_mapping(path_ref: Path) -> Dict[str, str]:
+    """Return column name mapping from CSV file at ``path_ref``."""
+    if not path_ref.exists():
+        pd.DataFrame(columns=["raw_name", "mapped_name"]).to_csv(path_ref, index=False)
+        return {}
+
+    df = pd.read_csv(path_ref)
+    df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
+    df.to_csv(path_ref, index=False)
+
+    mapping: Dict[str, str] = {}
+    for _, row in df.iterrows():
+        raw = row.get("raw_name")
+        mapped = row.get("mapped_name")
+        if pd.isna(raw):
+            continue
+        raw = str(raw)
+        mapped = "" if pd.isna(mapped) else str(mapped)
+        if mapped == "XXX":
+            # waiting for manual association
+            continue
+        if mapped == "":
+            mapping[raw] = "__DROP__"
+        else:
+            mapping[raw] = mapped
+    return mapping
+
+
+def load_value_mapping(path_ref: Path) -> Dict[str, Dict[str, str]]:
+    """Return per-column value mapping from CSV file at ``path_ref``."""
+    if not path_ref.exists():
+        pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"]).to_csv(path_ref, index=False)
+        return {}
+
+    df = pd.read_csv(path_ref)
+    df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
+    df.to_csv(path_ref, index=False)
+
+    mapping: Dict[str, Dict[str, str]] = {}
+    for _, row in df.iterrows():
+        col = row.get("column_name")
+        raw = row.get("raw_value")
+        mapped = row.get("mapped_value")
+        if pd.isna(col) or pd.isna(raw):
+            continue
+        col = str(col)
+        raw = str(raw)
+        mapped = "" if pd.isna(mapped) else str(mapped)
+        if mapped == "XXX":
+            continue
+        mapping.setdefault(col, {})[raw] = mapped
+
+    return mapping
 
 
 def unmerge_cells(df: pd.DataFrame) -> pd.DataFrame:
@@ -63,6 +121,96 @@ def remove_parasitic_rows(df: pd.DataFrame) -> pd.DataFrame:
 
     mask = df.apply(is_parasitic, axis=1)
     df = df[~mask]
+    return df
+
+
+def _append_new_columns(path_ref: Path, columns: Iterable[str]) -> None:
+    """Append unknown column names to ``path_ref`` CSV with empty mapping."""
+    if path_ref.exists():
+        df = pd.read_csv(path_ref)
+    else:
+        df = pd.DataFrame(columns=["raw_name", "mapped_name"])
+
+    existing = set(df.get("raw_name", []))
+    for col in columns:
+        if col not in existing:
+            df.loc[len(df)] = {"raw_name": col, "mapped_name": "XXX"}
+            existing.add(col)
+
+    df.drop_duplicates(subset=["raw_name"], keep="first", inplace=True)
+    df.to_csv(path_ref, index=False)
+
+
+def _append_new_values(path_ref: Path, rows: Iterable[tuple[str, str]]) -> None:
+    """Append unknown values to ``path_ref`` CSV with placeholder."""
+    if path_ref.exists():
+        df = pd.read_csv(path_ref)
+    else:
+        df = pd.DataFrame(columns=["column_name", "raw_value", "mapped_value"])
+
+    existing = set(zip(df.get("column_name", []), df.get("raw_value", [])))
+    for col, val in rows:
+        if (col, val) not in existing:
+            df.loc[len(df)] = {
+                "column_name": col,
+                "raw_value": val,
+                "mapped_value": "XXX",
+            }
+    df.drop_duplicates(subset=["column_name", "raw_value"], keep="first", inplace=True)
+    df.to_csv(path_ref, index=False)
+
+
+def _apply_mappings(
+    df: pd.DataFrame,
+    column_map: Dict[str, str],
+    value_map: Dict[str, Dict[str, str]],
+    *,
+    columns_file: Path,
+    values_file: Path,
+) -> pd.DataFrame:
+    """Rename columns and replace values using provided mappings."""
+    df = df.copy()
+
+    unknown_cols = [c for c in df.columns if c not in column_map]
+    if unknown_cols:
+        _append_new_columns(columns_file, unknown_cols)
+        raise StopIteration("Nouveau nom de colonne à mapper")
+
+    rename: Dict[str, str] = {}
+    drop_cols = []
+    for col in df.columns:
+        mapped = column_map.get(col)
+        if mapped == "__DROP__":
+            drop_cols.append(col)
+        else:
+            rename[col] = mapped
+
+    df = df.rename(columns=rename)
+    if drop_cols:
+        df.drop(columns=drop_cols, inplace=True)
+
+    for col in list(df.columns):
+        mapping = value_map.get(col)
+        if not mapping:
+            continue
+        new_vals = []
+
+        def convert(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NA
+            raw = str(val)
+            if raw not in mapping:
+                new_vals.append(raw)
+                return pd.NA
+            mapped = mapping[raw]
+            return pd.NA if mapped == "" else mapped
+
+        df[col] = df[col].map(convert)
+
+        if new_vals:
+            _append_new_values(values_file, [(col, v) for v in new_vals])
+            raise StopIteration("Nouvelles valeurs à mapper")
+
     return df
 
 
@@ -190,12 +338,30 @@ def standardize_and_clean(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataF
     return data
 
 
-def clean_data(df: pd.DataFrame, *, chrono_rank: int = 1) -> pd.DataFrame:
-    """Return ``df`` cleaned and standardized."""
+def clean_data(
+    df: pd.DataFrame,
+    *,
+    chrono_rank: int = 1,
+    column_map: Dict[str, str] | None = None,
+    value_map: Dict[str, Dict[str, str]] | None = None,
+    columns_file: Path | None = None,
+    values_file: Path | None = None,
+) -> pd.DataFrame:
+    """Return ``df`` cleaned, optionally using manual mappings."""
     df = unmerge_cells(df)
     df = drop_empty_rows(df)
     df = drop_empty_cols(df)
     df = remove_parasitic_rows(df)
     df.reset_index(drop=True, inplace=True)
+
+    if column_map is not None and columns_file is not None and values_file is not None:
+        df = _apply_mappings(
+            df,
+            column_map,
+            value_map or {},
+            columns_file=columns_file,
+            values_file=values_file,
+        )
+
     df = standardize_and_clean(df, chrono_rank=chrono_rank)
     return df

@@ -1,0 +1,16 @@
+column_name,allowed_value
+phase,1
+phase,2
+phase,3
+phase,4
+statut,joué
+statut,annulé
+statut,à jouer
+type,structurant
+type,saturant
+nature,mail
+nature,appel
+nature,SMS
+nature,vidéo
+nature,Weezer
+nature,oral
