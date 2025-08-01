@@ -9,7 +9,7 @@ Ce document explique comment contribuer efficacement au pipeline de traitement d
   - `src/` : modules fonctionnels (nettoyage, standardisation, base de données…).
   - `data/` : sous-dossiers `inputs/`, `archive/` et `control/` pour les fichiers d'entrée, l'archivage et les journaux.
   - `output/` : fichiers générés et base SQLite.
-  - `config/` : fichiers CSV/YAML de mapping et de schéma.
+  - `chronogram_pipeline/config/` : fichiers CSV/YAML de mapping et de schéma.
   - `tests/` : suite de tests `pytest`.
 - **`docs/`** : documentations internes.
 
