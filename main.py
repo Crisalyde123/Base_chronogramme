@@ -6,7 +6,12 @@ from typing import Dict, Iterable
 
 import pandas as pd
 
-from .mapping_utils import normalize_text
+from chronogram_pipeline.src.mapping_utils import normalize_text
+from chronogram_pipeline.src.excel_parser import detect_main_sheet
+from chronogram_pipeline.src.data_cleaner import clean_data
+from chronogram_pipeline.src.db_utils import create_connection, init_tables
+from chronogram_pipeline.src.db_utils import DEFAULT_DB
+from chronogram_pipeline.src.logger import get_logger
 
 
 def _norm(value: str) -> str:
@@ -410,3 +415,31 @@ def clean_data(
 
     df = standardize_and_clean(df, chrono_rank=chrono_rank)
     return df
+
+
+def run_pipeline(
+    excel_path: Path | str,
+    *,
+    db_path: Path | str | None = None,
+    log_dir: Path | str | None = None,
+) -> dict:
+    """Minimal pipeline used for testing.
+
+    Initializes the SQLite database, loads the Excel file and
+    returns the cleaned DataFrame. A ``StopIteration`` is raised
+    when the file does not contain any data rows.
+    """
+
+    db = Path(db_path) if db_path is not None else DEFAULT_DB
+    with create_connection(db) as conn:
+        init_tables(conn)
+
+    excel_path = Path(excel_path)
+    sheet = detect_main_sheet(excel_path)
+    df = pd.read_excel(excel_path, sheet_name=sheet)
+
+    if df.dropna(how="all").shape[0] <= 1:
+        raise StopIteration("Empty chronogram")
+
+    cleaned = clean_data(df)
+    return {"df": df, "clean_df": cleaned}
