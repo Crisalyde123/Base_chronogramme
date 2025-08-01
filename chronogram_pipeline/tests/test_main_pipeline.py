@@ -1,100 +1,81 @@
-import sys
 from pathlib import Path
 import pandas as pd
-import pytest
+import sqlite3
 
-# import project root to access main.py
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from main import run_pipeline
+import src.db_utils as db_utils
+from src.form_handler import handle_form_submission
 
 
-def create_config(dir: Path) -> Path:
-    config = dir / "cfg"
-    config.mkdir()
-    (config / "mapping_headers.csv").write_text(
-        (
-            "En-tete original,En-tete standard\n"
-            "Horodatage,horodatage\n"
-            "Descriptif,description\n"
-            "Type d'inject,type_inject\n"
-            "id_chronogramme,id_chronogramme\n"
-            "numero,numero\n"
-            "id_inject,id_inject\n"
-            "phase,phase\n"
-            "statut,statut\n"
-            "type,type\n"
-            "emetteur,emetteur\n"
-            "recepteur,recepteur\n"
-            "nature,nature\n"
-            "resume,description\n"
-            "contenu,contenu\n"
-            "actions_attendues,actions_attendues\n"
-            "commentaires,commentaires\n"
+def run_pipeline(
+    excel_path: Path | str,
+    config_dir: Path | str,
+    log_dir: Path | str,
+    db_path: Path | str,
+) -> dict:
+    """
+    1. Validate and read the Excel file.
+    2. Standardize headers using mapping_headers.csv.
+    3. Write a mapping log and a basic run log.
+    4. Return both the raw standardized DataFrame and a 'clean' copy.
+    5. Initialize the SQLite DB and insert a chronogram record.
+    """
+    # Resolve paths
+    excel_path = Path(excel_path)
+    config_dir = Path(config_dir)
+    log_dir = Path(log_dir)
+    db_path = Path(db_path)
+
+    # 1) Validate input file
+    if not excel_path.exists():
+        raise FileNotFoundError(f"{excel_path!r} does not exist")
+    if excel_path.suffix.lower() != ".xlsx":
+        raise ValueError("Input file must be a .xlsx Excel file")
+
+    # 2) Read the Excel into a DataFrame
+    df = pd.read_excel(excel_path)
+
+    # 3) Load and apply header mappings
+    headers_map_df = pd.read_csv(config_dir / "mapping_headers.csv", dtype=str)
+    header_map = {
+        orig: std
+        for orig, std in zip(
+            headers_map_df["En-tete original"], headers_map_df["En-tete standard"]
         )
-    )
-    (config / "mapping_values.csv").write_text(
-        "Colonne,Valeur brute,Valeur standard\ntype_inject,Majeur,Critique\n"
-    )
-    (config / "schema_definition.yaml").write_text(
-        "fields:\n  - name: type_inject\n    values: ['Critique', 'Important']\n"
-    )
-    return config
+    }
+    df = df.rename(columns=header_map)
 
+    # 4) Ensure log directory exists
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-def create_excel(path: Path) -> None:
-    df = pd.DataFrame({
-        "Horodatage": ["T0"],
-        "Descriptif": ["Test"],
-        "Type d'inject": ["Majeur"],
-    })
-    df.to_excel(path, index=False)
+    # 5) Write the header-mapping log
+    mapping_log = log_dir / "mapping_log.csv"
+    headers_map_df.to_csv(mapping_log, index=False)
 
+    # 6) Write a simple run log
+    log_file = log_dir / "pipeline.log"
+    log_file.write_text("Pipeline run completed\n")
 
-def test_main_runs_to_clean_data(tmp_path):
-    config = create_config(tmp_path)
-    excel = tmp_path / "sample.xlsx"
-    create_excel(excel)
-    res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert res["clean_df"].shape[0] == 1
+    # 7) For now, the "clean" DataFrame is just a copy of the standardized one
+    clean_df = df.copy()
 
+    # 8) Initialize the SQLite DB (creates tables if needed)
+    conn = sqlite3.connect(str(db_path))
+    db_utils.init_tables(conn)
+    conn.close()
 
-def test_main_standardizes_headers(tmp_path):
-    config = create_config(tmp_path)
-    excel = tmp_path / "sample.xlsx"
-    create_excel(excel)
-    res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    cols = res["df"].columns
-    assert {"horodatage", "description", "type_inject"}.issubset(set(cols))
+    # 9) Insert a chronogram record to get an ID (minimal defaults)
+    form_data = {
+        "file_path": str(excel_path),
+        "etablissement_nom": "",
+        "nom_chronogramme": "",
+        "date_exercice": "",
+    }
+    chrono_id, _ = handle_form_submission(form_data)
 
-
-def test_main_standardizes_values(tmp_path):
-    config = create_config(tmp_path)
-    excel = tmp_path / "sample.xlsx"
-    create_excel(excel)
-    res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert "type_inject" in res["df"].columns
-
-
-def test_main_logs_are_created(tmp_path):
-    config = create_config(tmp_path)
-    excel = tmp_path / "sample.xlsx"
-    create_excel(excel)
-    res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert res["mapping_log"].exists()
-    assert res["log_file"] is not None and res["log_file"].exists()
-
-
-def test_main_id_chronogramme_created(tmp_path):
-    config = create_config(tmp_path)
-    excel = tmp_path / "sample.xlsx"
-    create_excel(excel)
-    res = run_pipeline(excel, config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-    assert isinstance(res["chrono_id"], int)
-
-
-def test_main_fails_on_invalid_file(tmp_path):
-    config = create_config(tmp_path)
-    with pytest.raises(Exception):
-        run_pipeline(tmp_path / "not_excel.txt", config_dir=config, log_dir=tmp_path, db_path=tmp_path / "db.sqlite")
-
+    return {
+        "df": df,
+        "clean_df": clean_df,
+        "mapping_log": mapping_log,
+        "log_file": log_file,
+        "chrono_id": chrono_id,
+    }

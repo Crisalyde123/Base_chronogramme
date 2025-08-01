@@ -1,2 +1,13 @@
-type_inject:
-  majeur: Critique
+phase:
+  p1: "1"
+  p2: "2"
+statut:
+  joue: "joué"
+  annule: "annulé"
+type:
+  struct: "structurant"
+  satur: "saturant"
+nature:
+  maille: "mail"
+  sms: "SMS"
+  visio: "vidéo"

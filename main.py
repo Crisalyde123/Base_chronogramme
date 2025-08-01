@@ -15,6 +15,7 @@ from chronogram_pipeline.src import (
     mapping_utils,
     PipelineLogger,
     enrich_data,
+    apply_schema_columns,
 )
 from chronogram_pipeline.src.logger import get_logger
 
@@ -157,6 +158,9 @@ def run_pipeline(
                 id_chronogramme=chrono_id,
             )
         df_clean.columns = headers
+
+    with plog.step("APPLY_SCHEMA"):
+        df_clean = apply_schema_columns(df_clean, schema_yaml)
 
     with plog.step("STANDARDIZE_VALUES"):
         df_std = standardize_column_values(df_clean, mapping_values, schema_path=schema_yaml)
