@@ -4,12 +4,14 @@ import unicodedata
 from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Dict, Any
+import os
 import pandas as pd
 
 logger = get_logger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DB = BASE_DIR / "output/databases/chronogrammes.db"
+DB_DIR = Path(os.getenv("OUTPUT_DB_PATH", BASE_DIR / "output/databases"))
+DEFAULT_DB = DB_DIR / "chronogrammes.db"
 
 CHRONO_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS Chronogrammes (

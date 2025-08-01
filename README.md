@@ -18,6 +18,15 @@ Ce dépôt contient l'orchestration complète : extraction des fichiers Excel, 
    ```bash
    python chronogram_pipeline/src/init_db.py
    ```
+   Vous pouvez également lancer le script depuis son dossier :
+   ```bash
+   cd chronogram_pipeline/src
+   python init_db.py
+   ```
+   ou via le module Python :
+   ```bash
+   python -m chronogram_pipeline.src.init_db
+   ```
 
 Pour les opérations de standardisation pilotées par l'IA, renseignez les clefs d'accès
 dans les variables d'environnement `OPENAI_API_KEY` ou `MISTRAL_API_KEY` selon
