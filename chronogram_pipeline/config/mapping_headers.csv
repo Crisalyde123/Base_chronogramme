@@ -14,7 +14,6 @@ Commentaires,commentaires
 L,phase
 Nature de l'inject,type
 Condition,horodatage
-ID,id_inject
 Statut inject,statut
 Modalité,nature
 Réactions attendues ,actions_attendues
@@ -22,7 +21,6 @@ Tango,phase
 N°,numero
 Timing,horodatage
 Type,type
-Saturant,type
 Nature,nature
 Emmeteur,emetteur
 Récepteur ,recepteur
@@ -32,8 +30,7 @@ Actions attendues ,actions_attendues
 Etat,statut
 Type de stimuli,type
 Horaire Simulée,horodatage
-Horaire UTC+2,horodatage
-Animateur,emetteur
+Animateur,
 Emetteur simulé,emetteur
 Destinataire spécifique,recepteur
 Modalités de transmission,nature
