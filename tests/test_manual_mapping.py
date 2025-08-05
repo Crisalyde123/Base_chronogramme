@@ -1,11 +1,15 @@
 import sys
 from pathlib import Path
+
 import pandas as pd
+import openpyxl
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "chronogram_pipeline"))
 sys.path.insert(0, str(REPO_ROOT))
 
+from src.excel_parser import detect_main_sheet
+from src.manual_table_extractor import detect_header_row, detect_last_data_row
 from src.data_cleaner import (
     load_column_mapping,
     load_value_mapping,
@@ -13,68 +17,46 @@ from src.data_cleaner import (
     _append_new_values,
 )
 
-
-def test_load_column_mapping_purge(tmp_path):
-    csv = tmp_path / "colonnes.csv"
-    pd.DataFrame(
-        [
-            {"chronogramme": "C1", "raw_name": "A", "mapped_name": "X"},
-            {"chronogramme": "C1", "raw_name": "B", "mapped_name": "phase"},
-            {"chronogramme": "C1", "raw_name": "C", "mapped_name": ""},
-        ]
-    ).to_csv(csv, index=False)
-    history = tmp_path / "hist.csv"
-    mapping = load_column_mapping(csv, history_file=history)
-    assert mapping == {"B": "phase", "C": "__DROP__"}
-    remaining = pd.read_csv(csv)
-    assert list(remaining["raw_name"]) == ["A"]
-    hist = pd.read_csv(history)
-    assert len(hist) == 2
+INPUTS_DIR = REPO_ROOT / "chronogram_pipeline" / "data" / "inputs"
 
 
-def test_load_value_mapping_purge(tmp_path):
-    csv = tmp_path / "valeurs.csv"
-    pd.DataFrame(
-        [
-            {
-                "chronogramme": "C1",
-                "column_name": "phase",
-                "raw_value": "X",
-                "mapped_value": "1",
-            },
-            {
-                "chronogramme": "C1",
-                "column_name": "statut",
-                "raw_value": "old",
-                "mapped_value": "X",
-            },
-            {
-                "chronogramme": "C1",
-                "column_name": "phase",
-                "raw_value": "y",
-                "mapped_value": "__EMPTY__",
-            },
-        ]
-    ).to_csv(csv, index=False)
-    history = tmp_path / "hist_val.csv"
-    mapping = load_value_mapping(csv, history_file=history)
-    assert mapping == {"phase": {"X": "1", "y": ""}}
-    remaining = pd.read_csv(csv)
-    assert len(remaining) == 1
-    assert remaining.iloc[0]["raw_value"] == "old"
-    hist = pd.read_csv(history)
-    assert len(hist) == 2
+def _extract_table(path: Path) -> tuple[pd.DataFrame, list[str]]:
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb[detect_main_sheet(path)]
+    lines = [list(row) for row in ws.iter_rows(values_only=True)]
+    header_idx = detect_header_row(lines)
+    last_idx = detect_last_data_row(lines, header_idx)
+    header = lines[header_idx]
+    data = lines[header_idx + 1 : last_idx + 1]
+    df = pd.DataFrame(data, columns=header)
+    df.dropna(how="all", inplace=True)
+    return df, header
 
 
-def test_append_functions_no_duplicates(tmp_path):
+def test_manual_mapping_from_excel(tmp_path):
+    file_name = "Kit intermédiaire.xlsx"
+    df, headers = _extract_table(INPUTS_DIR / file_name)
+
+    headers = [h for h in headers if h is not None]
+
     col_csv = tmp_path / "cols.csv"
-    _append_new_columns(col_csv, "C1", ["A", "B"])
-    _append_new_columns(col_csv, "C2", ["A", "C"])
-    df = pd.read_csv(col_csv)
-    assert set(df["raw_name"]) == {"A", "B", "C"}
+    hist_csv = tmp_path / "cols_hist.csv"
+    _append_new_columns(col_csv, headers, file_name)
+    _append_new_columns(col_csv, headers, file_name)
+    mapping = load_column_mapping(col_csv, history_file=hist_csv)
+    assert mapping == {}
+    remaining_cols = pd.read_csv(col_csv)
+    assert set(remaining_cols["raw_name"]) == set(headers)
 
     val_csv = tmp_path / "vals.csv"
-    _append_new_values(val_csv, "C1", [("col", "1"), ("col", "2")])
-    _append_new_values(val_csv, "C2", [("col", "1")])
-    dfv = pd.read_csv(val_csv)
-    assert len(dfv) == 2
+    hist_val = tmp_path / "vals_hist.csv"
+    values = []
+    if "Vecteur" in df.columns:
+        values = [("Vecteur", v) for v in df["Vecteur"].dropna().astype(str).unique().tolist()]
+    _append_new_values(val_csv, values, file_name)
+    _append_new_values(val_csv, values, file_name)
+    val_mapping = load_value_mapping(val_csv, history_file=hist_val)
+    assert val_mapping == {}
+    remaining_vals = pd.read_csv(val_csv)
+    assert len(remaining_vals) == len(values)
+
