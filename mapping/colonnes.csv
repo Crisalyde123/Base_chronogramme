@@ -1,1 +1,78 @@
 chronogramme,raw_name,mapped_name
+ANS ESMS CHRONO .xlsx,N °,
+ANS ESMS CHRONO .xlsx,FREQUENCE,horodatage
+ANS ESMS CHRONO .xlsx,PHASE,phase
+ANS ESMS CHRONO .xlsx,"Contenu STIMULI
+(contenu du mail ou de l’appel téléphonique)",resume
+ANS ESMS CHRONO .xlsx,ÉMETTEUR,emetteur
+ANS ESMS CHRONO .xlsx,CELLULE DESTINATAIRE,recepteur
+ANS ESMS CHRONO .xlsx,DESTINATAIRE AU SEIN DE LA CELLULE,
+ANS ESMS CHRONO .xlsx,MODALITÉ DE TRANSMISSION,nature
+ANS ESMS CHRONO .xlsx,INPUT STIMULIS,
+ANS ESMS CHRONO .xlsx,RÉACTIONS ATTENDUES,actions_attendues
+ANS ESMS CHRONO .xlsx,Commentaires à l’attention de l'animateur,commentaires
+Chronogramme sur mesure.xlsx,Tango,phase
+Chronogramme sur mesure.xlsx,N°,
+Chronogramme sur mesure.xlsx,Timing,horodatage
+Chronogramme sur mesure.xlsx,Nature,nature
+Chronogramme sur mesure.xlsx,Emmeteur,emetteur
+Chronogramme sur mesure.xlsx,Récepteur ,recepteur
+Chronogramme sur mesure.xlsx,Description,resume
+Chronogramme sur mesure.xlsx,Corps,contenu
+Chronogramme sur mesure.xlsx,Actions attendues ,actions_attendues
+Chronogramme.xlsx,L,phase
+Chronogramme.xlsx,Nature de l'inject,type
+Chronogramme.xlsx,Condition,
+Chronogramme.xlsx,ID,
+Chronogramme.xlsx,Statut inject,statut
+Chronogramme.xlsx,Emetteur,emetteur
+Chronogramme.xlsx,Destinataire,recepteur
+Chronogramme.xlsx,Descriptif,resume
+Chronogramme.xlsx,Corps,contenu
+Chronogramme.xlsx,Modalité,nature
+Chronogramme.xlsx,Réactions attendues ,actions_attendues
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,N °,
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,FREQUENCE,horodatage
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,PHASE,phase
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,"Contenu STIMULI
+(contenu du mail ou de l’appel téléphonique)",resume
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,ÉMETTEUR,emetteur
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,CELLULE DESTINATAIRE,recepteur
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,DESTINATAIRE AU SEIN DE LA CELLULE,
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,MODALITÉ DE TRANSMISSION,nature
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,INPUT STIMULIS,
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,RÉACTIONS ATTENDUES,actions_attendues
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,Commentaires à l’attention de l'animateur,commentaires
+Clinique Bizet_Chronogramme ES kit intermédiaire vf.xlsx,detaluse hestia cursus WEB100T winpharm ,
+Kit intermédiaire.xlsx,Chronogramme Kit Intermédiaire - ORSAC (03/06) ,
+Kit intermédiaire.xlsx,Unnamed: 1,
+Kit intermédiaire.xlsx,Unnamed: 2,
+Kit intermédiaire.xlsx,Unnamed: 4,
+Kit intermédiaire.xlsx,Unnamed: 5,
+Kit intermédiaire.xlsx,Unnamed: 6,
+Kit intermédiaire.xlsx,Unnamed: 7,
+Kit intermédiaire.xlsx,Unnamed: 20,
+Kit intermédiaire.xlsx,Unnamed: 23,
+chrono test nombreuses colonnes.xlsx,N°,
+chrono test nombreuses colonnes.xlsx,Etat,statut
+chrono test nombreuses colonnes.xlsx,Type de stimuli,type
+chrono test nombreuses colonnes.xlsx,Horaire Simulée,horodatage
+chrono test nombreuses colonnes.xlsx,Horaire UTC+2,
+chrono test nombreuses colonnes.xlsx,Animateur,
+chrono test nombreuses colonnes.xlsx,Emetteur simulé,emetteur
+chrono test nombreuses colonnes.xlsx,Destinataire,recepteur
+chrono test nombreuses colonnes.xlsx,Destinataire spécifique,
+chrono test nombreuses colonnes.xlsx,Modalités de transmission,nature
+chrono test nombreuses colonnes.xlsx,Objet,resume
+chrono test nombreuses colonnes.xlsx,Contenu,contenu
+chrono test nombreuses colonnes.xlsx,Réactions attendues,actions_attendues
+chrono test nombreuses colonnes.xlsx,Observations,commentaires
+chrono test nombreuses colonnes.xlsx,Remarques atelier chronogramme ,
+chrono test nombreuses colonnes.xlsx,Unnamed: 15,
+test bonne feuille et trcabilité feuille.xlsx,Etat,statut
+test bonne feuille et trcabilité feuille.xlsx,N°,
+test bonne feuille et trcabilité feuille.xlsx,Type de stimuli,type
+test bonne feuille et trcabilité feuille.xlsx,Objet,resume
+test bonne feuille et trcabilité feuille.xlsx,Corps,contenu
+test bonne feuille et trcabilité feuille.xlsx,Personnage.1,
+test bonne feuille et trcabilité feuille.xlsx,Modalité,nature
